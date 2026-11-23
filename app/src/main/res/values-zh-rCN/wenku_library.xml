@@ -12,6 +12,9 @@
     <string name="wenku_category_documents">文档</string>
     <string name="wenku_category_comics">漫画</string>
     <string name="wenku_category_other">其他书籍</string>
+    <string name="wenku_category_order">分类顺序</string>
+    <string name="wenku_category_move_up">上移 %1$s</string>
+    <string name="wenku_category_move_down">下移 %1$s</string>
     <string name="wenku_search_library">搜索书名或作者</string>
     <string name="wenku_empty_library_details">导入设备上的 TXT、EPUB 或 PDF，即可离线阅读。</string>
     <string name="wenku_empty_library_title">书库还没有书籍</string>

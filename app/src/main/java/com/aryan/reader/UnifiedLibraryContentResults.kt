@@ -58,7 +58,7 @@ internal fun LibraryContentSearchResultRow(
     val visibleHits = SharedContentSearchHitVisibility.hitsFor(result, expanded)
     val hiddenMatches = SharedContentSearchHitVisibility.hiddenMatchCount(result, expanded)
     val coverTap = rememberLibraryCoverTap(item, animateOpening)
-    val outline = LocalSharedLibrarySurfaceStyle.current?.outline
+    val outline = LocalSharedLibrarySurfaceStyle.current?.listOutline
     Card(
         modifier = modifier
             .fillMaxWidth()

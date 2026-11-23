@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
@@ -30,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -104,7 +108,16 @@ internal fun UnifiedFoldersSection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun UnifiedLibraryControlsSheet(currentFilter: UnifiedLibraryFilter, currentSortOrder: SortOrder, onFilterChanged: (UnifiedLibraryFilter) -> Unit, onSortChanged: (SortOrder) -> Unit, onAdvancedFiltersClick: () -> Unit, onDismiss: () -> Unit) {
+internal fun UnifiedLibraryControlsSheet(
+    currentFilter: UnifiedLibraryFilter,
+    currentSortOrder: SortOrder,
+    canReorderGroups: Boolean,
+    onFilterChanged: (UnifiedLibraryFilter) -> Unit,
+    onSortChanged: (SortOrder) -> Unit,
+    onAdvancedFiltersClick: () -> Unit,
+    onGroupOrderClick: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     com.aryan.reader.shared.ui.SharedAndroidUnifiedLibraryControlsSheet(
         currentFilter = currentFilter,
         currentSortOrder = currentSortOrder,
@@ -120,6 +133,13 @@ internal fun UnifiedLibraryControlsSheet(currentFilter: UnifiedLibraryFilter, cu
         onSortChanged = onSortChanged,
         onAdvancedFilters = onAdvancedFiltersClick,
         onDismiss = onDismiss,
+        additionalAction = {
+            OutlinedButton(
+                onClick = onGroupOrderClick,
+                enabled = canReorderGroups,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.wenku_category_order)) }
+        },
     )
 }
 
@@ -239,6 +259,7 @@ private fun LibraryReadingStatusButtons(
 internal fun UnifiedLibraryHome(
     modifier: Modifier,
     books: List<RecentFileItem>,
+    groupOrder: List<String>,
     filter: UnifiedLibraryFilter,
     query: String,
     sortOrder: SortOrder,
@@ -268,14 +289,13 @@ internal fun UnifiedLibraryHome(
     // text, and an expand affordance for the rest of that book's matches.
     val contentSearchActive = searchInsideFiles && query.isNotBlank()
     val context = LocalContext.current
-    val bookGroups = remember(books, context, query.isBlank()) {
-        if (query.isNotBlank()) emptyList() else books.groupBy { it.libraryBookGroup() }
-            .entries.sortedWith(compareBy(
-                { it.key.category.ordinal }, { it.key.tagLabel.orEmpty() }, { it.key.fileType?.name.orEmpty() },
-            ))
-            .map { (group, items) ->
-                SharedAndroidLibraryGroup(group.id, group.label(context), libraryCategoryAccent(group.category), items)
+    val bookGroups = remember(books, context, query.isBlank(), groupOrder) {
+        if (query.isNotBlank()) emptyList() else {
+            val grouped = books.groupBy { it.libraryBookGroup() }
+            orderLibraryGroups(grouped.keys, groupOrder).map { group ->
+                SharedAndroidLibraryGroup(group.id, group.label(context), libraryCategoryAccent(group.category), grouped.getValue(group))
             }
+        }
     }
     com.aryan.reader.shared.ui.SharedAndroidUnifiedLibraryHome(
         books = books,
@@ -383,6 +403,42 @@ internal fun UnifiedLibraryHome(
         ),
         statusControls = { LibraryReadingStatusButtons(filter, onFilterChange) },
         modifier = modifier,
+    )
+}
+
+@Composable
+internal fun LibraryGroupOrderDialog(
+    groups: List<LibraryBookGroup>,
+    onMove: (from: Int, to: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.wenku_category_order)) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                items(groups.size, key = { groups[it].id }) { index ->
+                    val label = groups[index].label(context)
+                    ListItem(
+                        headlineContent = { Text(label) },
+                        trailingContent = {
+                            Row {
+                                IconButton(onClick = { onMove(index, index - 1) }, enabled = index > 0) {
+                                    Icon(Icons.Default.KeyboardArrowUp, stringResource(R.string.wenku_category_move_up, label))
+                                }
+                                IconButton(onClick = { onMove(index, index + 1) }, enabled = index < groups.lastIndex) {
+                                    Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.wenku_category_move_down, label))
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
     )
 }
 

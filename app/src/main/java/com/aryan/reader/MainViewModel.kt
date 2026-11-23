@@ -819,7 +819,31 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     val incomingCloudFolderPrompt: StateFlow<CloudFolderIncomingFolderPrompt?> =
         _incomingCloudFolderPrompt.asStateFlow()
 
-    private suspend fun prepareBookForImport(externalUri: Uri): AndroidPreparedImport? = withContext(Dispatchers.IO) {
+    private val libraryFileDuplicates = LibraryFileDuplicates(
+        sizeOf = { path ->
+            val uri = path.toUri()
+            runCatching {
+                if (uri.scheme == "file") {
+                    uri.path?.let { File(it).length() } ?: 0L
+                } else {
+                    appContext.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                        val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (index >= 0 && cursor.moveToFirst()) cursor.getLong(index) else 0L
+                    } ?: 0L
+                }
+            }.getOrDefault(0L)
+        },
+        hashOf = { path -> FileHasher.calculateSha256 { appContext.contentResolver.openInputStream(path.toUri()) } },
+    )
+
+    private sealed interface BookImportPreparation {
+        data class Ready(val book: AndroidPreparedImport) : BookImportPreparation
+        data class Existing(val book: RecentFileItem) : BookImportPreparation
+        data object Unsupported : BookImportPreparation
+        data object Failed : BookImportPreparation
+    }
+
+    private suspend fun prepareBookForImport(externalUri: Uri): BookImportPreparation = withContext(Dispatchers.IO) {
         val displayName = getFileNameFromUri(externalUri, appContext)
         var type = getFileTypeFromUri(externalUri, appContext)
 
@@ -828,7 +852,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         }
         if (hash == null) {
             Timber.e("Failed to process file hash for $externalUri")
-            return@withContext null
+            return@withContext if (type == null) BookImportPreparation.Unsupported else BookImportPreparation.Failed
         }
 
         val existingItem = bookStore.getFileByBookId(hash)
@@ -841,8 +865,15 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             } else {
                 Timber.i("Book with ID: $hash already exists. Skipping import.")
-                return@withContext null
+                return@withContext BookImportPreparation.Existing(existingItem)
             }
+        }
+
+        if (type != null) {
+            val duplicate = libraryFileDuplicates.existingBook(
+                bookStore.getRecentFilesFlow().first(), externalUri.toString(), type, hash,
+            )
+            if (duplicate != null) return@withContext BookImportPreparation.Existing(duplicate)
         }
 
         val fileName = displayName ?: ""
@@ -852,7 +883,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
             Timber.d("MainViewModel: Calibre processZip returned: $bundleResult")
 
             if (bundleResult != null) {
-                return@withContext AndroidPreparedImport(
+                return@withContext BookImportPreparation.Ready(AndroidPreparedImport(
                     internalUri = bundleResult.internalBookUri,
                     result = com.aryan.reader.shared.ImportResult(
                         uriString = bundleResult.internalBookUri.toString(),
@@ -860,20 +891,20 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                         type = bundleResult.type,
                     ),
                     bundleResult = bundleResult
-                )
+                ))
             }
             if (type == null) type = FileType.CBZ
         }
 
-        if (type == null) return@withContext null
+        if (type == null) return@withContext BookImportPreparation.Unsupported
 
         Timber.i("Importing new book with ID: $hash")
-        val internalFile = bookImporter.importBook(externalUri) ?: return@withContext null
+        val internalFile = bookImporter.importBook(externalUri) ?: return@withContext BookImportPreparation.Failed
         val internalUri = internalFile.toUri()
-        return@withContext AndroidPreparedImport(
+        return@withContext BookImportPreparation.Ready(AndroidPreparedImport(
             internalUri = internalUri,
             result = com.aryan.reader.shared.ImportResult(internalUri.toString(), hash, type),
-        )
+        ))
     }
 
     val libraryFlow = combine(
@@ -896,24 +927,54 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     private val bookCategoryIds = MutableStateFlow(
         categoryPreferences.all.mapNotNull { (id, value) -> (value as? String)?.let { id to it } }.toMap()
     )
-    private val presentedLibraryFlow = combine(libraryFlow, removedLibraryBookIds, bookCategoryIds) { (books, shelves, refs), removed, categories ->
-        if (removed.isEmpty() && categories.isEmpty()) Triple(books, shelves, refs)
-        else Triple(
-            books.asSequence().filterNot { it.bookId in removed }.map { item ->
-                categories[item.bookId]?.let { item.copy(libraryCategoryId = it) } ?: item
-            }.toList(),
+    private val _libraryGroupOrder = MutableStateFlow(runCatching {
+        val saved = JSONArray(prefs.getString("wenku_library_group_order", "[]"))
+        List(saved.length()) { saved.getString(it) }.distinct()
+    }.getOrDefault(emptyList()))
+    internal val libraryGroupOrder = _libraryGroupOrder.asStateFlow()
+
+    internal fun moveLibraryGroup(groups: List<LibraryBookGroup>, from: Int, to: Int) {
+        if (from !in groups.indices || to !in groups.indices || from == to) return
+        val visibleOrder = groups.map(LibraryBookGroup::id).toMutableList()
+        visibleOrder.add(to, visibleOrder.removeAt(from))
+        val knownOrder = (_libraryGroupOrder.value + visibleOrder).distinct()
+        val visibleIds = visibleOrder.toSet()
+        val reordered = visibleOrder.iterator()
+        val next = knownOrder.map { if (it in visibleIds) reordered.next() else it }
+        prefs.edit { putString("wenku_library_group_order", JSONArray(next).toString()) }
+        _libraryGroupOrder.value = next
+    }
+
+    private val libraryCopies = libraryFlow.map { (books, shelves, refs) ->
+        Triple(libraryFileDuplicates.groups(books), shelves, refs)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Triple(emptyList(), emptyList(), emptyList()))
+
+    private val presentedLibraryFlow = combine(libraryCopies, removedLibraryBookIds, bookCategoryIds) { (groups, shelves, refs), removed, categories ->
+        Triple(
+            groups.mapNotNull { copies ->
+                val visible = copies.filterNot { it.bookId in removed }
+                preferredLibraryCopy(visible)?.let { item ->
+                    val category = categories[item.bookId] ?: visible.firstNotNullOfOrNull { categories[it.bookId] }
+                    if (category == null) item else item.copy(libraryCategoryId = category)
+                }
+            },
             shelves,
             refs,
         )
     }
-    val removedLibraryBooks = combine(bookStore.getRecentFilesFlow(), removedLibraryBookIds) { books, removed ->
-        books.filter { it.bookId in removed }.sortedBy { it.cardTitle() }
+    val removedLibraryBooks = combine(libraryCopies, removedLibraryBookIds) { (groups), removed ->
+        groups.mapNotNull { preferredLibraryCopy(it.filter { book -> book.bookId in removed }) }.sortedBy { it.cardTitle() }
     }
+
+    private fun equivalentLibraryBookIds(bookIds: Set<String>): Set<String> =
+        libraryCopies.value.first.filter { group -> group.any { it.bookId in bookIds } }
+            .flatten().mapTo(bookIds.toMutableSet()) { it.bookId }
 
     @Synchronized
     private fun changeRemovedLibraryBooks(bookIds: Set<String>, remove: Boolean): Boolean {
         val previous = removedLibraryBookIds.value
-        val next = if (remove) previous + bookIds else previous - bookIds
+        val copies = equivalentLibraryBookIds(bookIds)
+        val next = if (remove) previous + copies else previous - copies
         if (next == previous) return false
         prefs.edit { putStringSet("wenku_removed_library_books", next) }
         removedLibraryBookIds.value = next
@@ -934,7 +995,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     internal fun setContextualLibraryCategory(category: LibraryBookCategory?) {
-        val ids = _internalState.value.contextualActionItems.map { it.bookId }.toSet()
+        val ids = equivalentLibraryBookIds(_internalState.value.contextualActionItems.mapTo(mutableSetOf()) { it.bookId })
         if (ids.isEmpty()) return
         categoryPreferences.edit {
             ids.forEach { id -> if (category == null) remove(id) else putString(id, category.name) }
@@ -7147,36 +7208,27 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
 
             withContext(Dispatchers.IO) {
                 for (externalUri in uris) {
-                    val importResult = prepareBookForImport(externalUri)
-                    if (importResult != null) {
-                        val internalUri = importResult.internalUri
-                        val bookId = importResult.bookId
-                        val type = importResult.type
-                        val displayName = getFileNameFromUri(externalUri, appContext) ?: "Unknown File"
-
-                        addFileToRecent(
-                            uri = internalUri,
-                            type = type,
-                            bookId = bookId,
-                            customDisplayName = displayName,
-                            isRecent = false,
-                            sourceFolderUri = null,
-                            bundleResult = importResult.bundleResult
-                        )
-                        outcomeCounts = outcomeCounts.record(MobileImportOutcome.ADDED)
-                    } else {
-                        val hash = FileHasher.calculateSha256 {
-                            appContext.contentResolver.openInputStream(externalUri)
+                    val outcome = when (val preparation = prepareBookForImport(externalUri)) {
+                        is BookImportPreparation.Ready -> {
+                            val book = preparation.book
+                            addFileToRecent(
+                                uri = book.internalUri,
+                                type = book.type,
+                                bookId = book.bookId,
+                                customDisplayName = getFileNameFromUri(externalUri, appContext) ?: "Unknown File",
+                                isRecent = false,
+                                bundleResult = book.bundleResult,
+                            )
+                            MobileImportOutcome.ADDED
                         }
-                        if (hash != null && bookStore.getFileByBookId(hash) != null) {
-                            val restored = changeRemovedLibraryBooks(setOf(hash), remove = false)
-                            outcomeCounts = outcomeCounts.record(if (restored) MobileImportOutcome.ADDED else MobileImportOutcome.DUPLICATE)
-                        } else if (getFileTypeFromUri(externalUri, appContext) == null) {
-                            outcomeCounts = outcomeCounts.record(MobileImportOutcome.UNSUPPORTED)
-                        } else {
-                            outcomeCounts = outcomeCounts.record(MobileImportOutcome.FAILED)
+                        is BookImportPreparation.Existing -> {
+                            val restored = changeRemovedLibraryBooks(setOf(preparation.book.bookId), remove = false)
+                            if (restored) MobileImportOutcome.ADDED else MobileImportOutcome.DUPLICATE
                         }
+                        BookImportPreparation.Unsupported -> MobileImportOutcome.UNSUPPORTED
+                        BookImportPreparation.Failed -> MobileImportOutcome.FAILED
                     }
+                    outcomeCounts = outcomeCounts.record(outcome)
                 }
             }
 
@@ -7335,52 +7387,35 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val importResult = prepareBookForImport(externalUri)
-
-                if (importResult != null) {
-                    val internalUri = importResult.internalUri
-                    val bookId = importResult.bookId
-                    val type = importResult.type
-                    if (isExternalIntent) {
-                        trackExternalOpenForClose(
-                            bookId = bookId,
-                            importedCopyUriString = internalUri.toString(),
-                            isTemporaryExternalIntent = isTemporaryExternalIntent
+                when (val preparation = prepareBookForImport(externalUri)) {
+                    is BookImportPreparation.Ready -> {
+                        val book = preparation.book
+                        if (isExternalIntent) {
+                            trackExternalOpenForClose(
+                                bookId = book.bookId,
+                                importedCopyUriString = book.internalUri.toString(),
+                                isTemporaryExternalIntent = isTemporaryExternalIntent,
+                            )
+                        }
+                        openBook(
+                            book.internalUri, bookId = book.bookId, type = book.type,
+                            originalDisplayName = getFileNameFromUri(externalUri, appContext) ?: "Unknown File",
+                            bundleResult = book.bundleResult,
                         )
                     }
-                    val displayName = getFileNameFromUri(externalUri, appContext) ?: "Unknown File"
-                    openBook(
-                        internalUri, bookId = bookId, type = type,
-                        originalDisplayName = displayName, bundleResult = importResult.bundleResult
-                    )
-                } else {
-                    val hash = FileHasher.calculateSha256 {
-                        appContext.contentResolver.openInputStream(externalUri)
+                    is BookImportPreparation.Existing -> {
+                        Timber.i("Re-selected an existing book. Opening it.")
+                        restoreLibraryBook(preparation.book.bookId)
+                        onRecentFileClicked(preparation.book)
+                        _internalState.update { it.copy(isLoading = false) }
                     }
-                    if (hash != null) {
-                        val existingItem = bookStore.getFileByBookId(hash)
-                        if (existingItem != null) {
-                            Timber.i("Re-selected an existing book. Opening it.")
-                            restoreLibraryBook(existingItem.bookId)
-                            if (isTemporaryExternalIntent) {
-                                trackExternalOpenForClose(
-                                    bookId = existingItem.bookId,
-                                    importedCopyUriString = null,
-                                    isTemporaryExternalIntent = true
-                                )
-                            }
-                            onRecentFileClicked(existingItem)
-                            _internalState.update { it.copy(isLoading = false) }
-                            return@launch
+                    BookImportPreparation.Unsupported, BookImportPreparation.Failed -> {
+                        val messageRes = if (preparation == BookImportPreparation.Unsupported) {
+                            R.string.error_unsupported_file_type
+                        } else R.string.error_import_file_failed
+                        _internalState.update {
+                            it.copy(isLoading = false, errorMessage = appContext.getString(messageRes))
                         }
-                    }
-                    val messageRes = if (getFileTypeFromUri(externalUri, appContext) == null) {
-                        R.string.error_unsupported_file_type
-                    } else {
-                        R.string.error_import_file_failed
-                    }
-                    _internalState.update {
-                        it.copy(isLoading = false, errorMessage = appContext.getString(messageRes))
                     }
                 }
             } catch (e: SecurityException) {

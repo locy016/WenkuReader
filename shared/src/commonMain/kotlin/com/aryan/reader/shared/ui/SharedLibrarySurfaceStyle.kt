@@ -8,6 +8,7 @@ data class SharedLibrarySurfaceStyle(
     val shape: Shape,
     val outline: BorderStroke,
     val activeOutline: BorderStroke,
+    val listOutline: BorderStroke = outline,
 )
 
 val LocalSharedLibrarySurfaceStyle = staticCompositionLocalOf<SharedLibrarySurfaceStyle?> { null }

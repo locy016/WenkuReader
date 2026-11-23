@@ -41,6 +41,16 @@ internal data class LibraryBookGroup(
     }
 }
 
+internal fun orderLibraryGroups(groups: Collection<LibraryBookGroup>, savedOrder: List<String>): List<LibraryBookGroup> {
+    val positions = savedOrder.withIndex().associate { (index, id) -> id to index }
+    return groups.sortedWith(compareBy(
+        { positions[it.id] ?: Int.MAX_VALUE },
+        { it.category.ordinal },
+        { it.tagLabel.orEmpty() },
+        { it.fileType?.name.orEmpty() },
+    ))
+}
+
 internal fun RecentFileItem.libraryBookGroup(): LibraryBookGroup {
     val separateFileType = type.takeIf { it == FileType.TXT || it == FileType.EPUB }
     LibraryBookCategory.fromId(libraryCategoryId)?.let { return LibraryBookGroup(it, fileType = separateFileType) }

@@ -76,6 +76,15 @@ class UnifiedLibraryScreenTest {
     }
 
     @Test
+    fun savedCategoryOrderPrecedesNewGroupsWithoutChangingTheirDefaultOrder() {
+        val epub = LibraryBookGroup(LibraryBookCategory.EBOOKS, fileType = FileType.EPUB)
+        val txt = LibraryBookGroup(LibraryBookCategory.EBOOKS, fileType = FileType.TXT)
+        val pdf = LibraryBookGroup(LibraryBookCategory.DOCUMENTS)
+        assertEquals(listOf(epub, txt, pdf), orderLibraryGroups(listOf(pdf, txt, epub), emptyList()))
+        assertEquals(listOf(txt, epub, pdf), orderLibraryGroups(listOf(pdf, txt, epub), listOf("missing-group", txt.id)))
+    }
+
+    @Test
     fun continueReadingPrefersMostRecentlyReadInProgressBook() {
         val older = book("Older", 30f, timestamp = 10L)
         val newer = book("Newer", 60f, timestamp = 20L)

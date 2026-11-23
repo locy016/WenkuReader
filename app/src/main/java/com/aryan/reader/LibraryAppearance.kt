@@ -45,6 +45,7 @@ internal fun librarySurfaceStyle(): SharedLibrarySurfaceStyle {
                     listOf(colors.primary.copy(alpha = 0.88f), colors.tertiary.copy(alpha = 0.60f)),
                 ),
             ),
+            listOutline = BorderStroke(0.5.dp, colors.outlineVariant.copy(alpha = 0.55f)),
         )
     }
 }

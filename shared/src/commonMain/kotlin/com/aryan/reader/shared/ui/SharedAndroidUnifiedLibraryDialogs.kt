@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -45,9 +47,10 @@ fun SharedAndroidUnifiedLibraryControlsSheet(
     onSortChanged: (SortOrder) -> Unit,
     onAdvancedFilters: () -> Unit,
     onDismiss: () -> Unit,
+    additionalAction: @Composable () -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding()) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp)) {
             Text(strings.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(strings.readStatus, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -62,6 +65,7 @@ fun SharedAndroidUnifiedLibraryControlsSheet(
                 }
             }
             OutlinedButton(onClick = onAdvancedFilters, modifier = Modifier.fillMaxWidth().padding(top = 20.dp)) { Text(strings.advancedFilters) }
+            additionalAction()
         }
     }
 }

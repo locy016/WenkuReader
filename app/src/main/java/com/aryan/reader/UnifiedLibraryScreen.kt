@@ -74,6 +74,10 @@ fun UnifiedLibraryScreen(
     widthSizeClass: WindowWidthSizeClass,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val groupOrder by viewModel.libraryGroupOrder.collectAsStateWithLifecycle()
+    val orderedGroups = remember(uiState.rawLibraryFiles, groupOrder) {
+        orderLibraryGroups(uiState.rawLibraryFiles.map { it.libraryBookGroup() }.toSet(), groupOrder)
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val audiobookImporter = remember(context) { AudiobookImporter(context.applicationContext) }
@@ -123,6 +127,7 @@ fun UnifiedLibraryScreen(
         viewModel.searchLibraryContent(debouncedQuery)
     }
     var showLibraryControls by rememberSaveable { mutableStateOf(false) }
+    var showGroupOrder by rememberSaveable { mutableStateOf(false) }
     var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     var showPermanentDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
     var showCategoryDialog by rememberSaveable { mutableStateOf(false) }
@@ -558,6 +563,7 @@ fun UnifiedLibraryScreen(
                 } else UnifiedLibraryHome(
                     modifier = Modifier.padding(padding),
                     books = visibleBooks,
+                    groupOrder = groupOrder,
                     filter = filter,
                     query = debouncedQuery,
                     sortOrder = uiState.sortOrder,
@@ -673,13 +679,25 @@ fun UnifiedLibraryScreen(
         UnifiedLibraryControlsSheet(
             currentFilter = filter,
             currentSortOrder = uiState.sortOrder,
+            canReorderGroups = orderedGroups.size > 1,
             onFilterChanged = { filter = it },
             onSortChanged = viewModel::setSortOrder,
             onAdvancedFiltersClick = {
                 showLibraryControls = false
                 showAdvancedFilters = true
             },
+            onGroupOrderClick = {
+                showLibraryControls = false
+                showGroupOrder = true
+            },
             onDismiss = { showLibraryControls = false }
+        )
+    }
+    if (showGroupOrder) {
+        LibraryGroupOrderDialog(
+            groups = orderedGroups,
+            onMove = { from, to -> viewModel.moveLibraryGroup(orderedGroups, from, to) },
+            onDismiss = { showGroupOrder = false },
         )
     }
     if (showAudiobookAddSheet) {

@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="wenku_category_order">Category order</string>
+    <string name="wenku_category_move_up">Move %1$s up</string>
+    <string name="wenku_category_move_down">Move %1$s down</string>
     <string name="wenku_local_folders">Local folders</string>
     <string name="wenku_library_title">Library</string>
     <string name="wenku_change_category">Book category</string>

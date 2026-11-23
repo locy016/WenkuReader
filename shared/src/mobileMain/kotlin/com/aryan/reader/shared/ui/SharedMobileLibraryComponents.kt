@@ -191,7 +191,7 @@ fun SharedMobileLibraryBookListCardFrame(
 ) {
     val libraryStyle = LocalSharedLibrarySurfaceStyle.current
     val cardShape = libraryStyle?.shape ?: MaterialTheme.shapes.large
-    val outline = libraryStyle?.let { if (isSelected) it.activeOutline else it.outline }
+    val outline = libraryStyle?.let { if (isSelected) it.activeOutline else it.listOutline }
     ElevatedCard(
         shape = cardShape,
         colors = CardDefaults.elevatedCardColors(
