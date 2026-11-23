@@ -2,157 +2,27 @@
 
 <img src="branding/wenku-reader/launcher-preview.png" width="80" alt="文库阅读图标" />
 
-基于 Episteme OSS 的 Android 手机和平板阅读应用，支持离线文档与电子书阅读。
+文库阅读是一款面向 Android 手机和平板的本地阅读应用。把设备里的小说、电子书、文档和漫画导入书库，即可分类查找、离线阅读，并在下次打开时回到上次的位置。
 
-**修改声明（2026-11-23，文库阅读 0.1.7）** 文库阅读是 Episteme OSS 的独立派生项目，基于上游 `v1.0.59-oss`（`e3008fd4`）修改。主要变更包括 Android 应用标识和图标、书库界面、中文 TXT 章节识别、阅读界面和构建流程。[上游版本](https://github.com/Aryan-Raj3112/episteme/releases/tag/v1.0.59-oss)
+## APP 功能
 
-文库阅读作为一个整体按 GNU Affero General Public License v3.0 only（`AGPL-3.0-only`）提供，可依照该协议使用、修改和再分发，软件按协议规定提供且不附带担保。上游作品的版权声明以及第三方组件各自的声明和许可继续适用。[完整许可证](LICENSE)
+| 使用场景 | 已实现的功能 |
+| --- | --- |
+| 导入内容 | 从系统文件选择器导入文件，或授权本地文件夹加入书库。支持 TXT、EPUB、PDF、MOBI／AZW／AZW3／PRC、FB2、Markdown、HTML、Word（DOCX／DOC／DOT）、ODT／FODT、PPTX，以及 CBZ／CBR／CB7／CBT 漫画。 |
+| 整理书库 | 按书名或作者搜索，按类别分组，在五列网格和紧凑列表之间切换。可按全部、正在阅读、已阅、未读筛选，手动调整分类，从设置恢复已移除的书籍。 |
+| 中文小说与电子书 | 识别常见中文 TXT 章节标题，按目录跳转。排版类内容可切换翻页和纵向滚动，调整字体、字号、行距和阅读主题。 |
+| PDF 与固定版式文件 | 支持缩放、跳页和通过目录定位。带文字层的 PDF 支持文内搜索，适用文件可使用书签、标注等阅读工具。 |
+| 朗读 | 支持在适用的文本和电子书中使用设备语音引擎朗读，可设置声音与读音替换。 |
+| 继续阅读 | 记录书籍阅读位置，可从书库的续读按钮回到最近阅读的内容，也可重新打开指定书籍接续。 |
 
-本源码修订对应 Android `ossRelease` 版 0.1.7（`versionCode 28`）。已构建的签名 APK 文件 SHA-256 为 `7d7e842793de085020fabc361b6a526dd1bb7765824f6204c549d8b2afcb7dd6`。构建步骤和原生库来源见手册。[开发、验收与 USB 发布手册](DEVELOPMENT.md)
+## 源码与开发
 
-## 文库阅读开发
+- 「设置 → 关于 → 本版本源码」打开对应 Git 标签。0.1.8 的源码见 [v0.1.8](https://github.com/locy016/WenkuReader/tree/v0.1.8)。
+- 需要 JDK 21 和对应的 Android SDK 及 NDK。正式构建任务为 `:app:assembleOssRelease`，环境配置、模拟器验收及 USB 升级步骤见 [开发与发布手册](DEVELOPMENT.md)。
+- 功能建议和问题可通过 [GitHub Issues](https://github.com/locy016/WenkuReader/issues) 反馈。开发约定见 [项目约束](AGENTS.md)。
 
-- [开发、验收与 USB 发布手册](DEVELOPMENT.md)
-- [项目开发约束](AGENTS.md)
+## 许可与致谢
 
-## 上游项目
+文库阅读按 GNU Affero General Public License v3.0 only（AGPL-3.0-only）提供。使用、修改和再分发的条件，以及担保条款，见 [完整许可证](LICENSE)。APK 的「关于 → 许可证」也提供离线许可正文、第三方源码清单和依赖来源。
 
-<div align="center">
-
-  <h1>
-    <img src="branding/app-icon/png/branding/icon-128.png" height="48" width="48" align="absmiddle" alt="Episteme Reader Icon"/>
-    <span>&nbsp;Episteme Reader</span>
-  </h1>
-
-  <p>A modern, offline-first, privacy-focused document and e-book reader for mobile and desktop, built with Kotlin Multiplatform and Compose.</p>
-
-  <a href="https://epistemereader.com"><img alt="Download from epistemereader.com" src="https://img.shields.io/badge/Download-epistemereader.com-2f6f5e?style=for-the-badge" height="44" align="absmiddle"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/com.aryan.reader.oss/"><img alt="Get it on F-Droid" src="https://f-droid.org/badge/get-it-on.png" height="66" align="absmiddle"/></a>&nbsp;<a href="https://play.google.com/store/apps/details?id=com.aryan.reader"><img alt="Get it on Google Play" src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="44" align="absmiddle"/></a>&nbsp;&nbsp;<a href="https://apps.apple.com/us/app/episteme-pdf-ebook-reader/id6803775133"><img alt="Download on the App Store" src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" height="44" align="absmiddle"/></a>&nbsp;&nbsp;&nbsp;<a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Aryan-Raj3112/episteme"><img alt="Get it on Obtainium" src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" height="64" align="absmiddle"/></a>
-
-</div>
-
-<br/>
-
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/EPISTEME.png" alt="Episteme Reader on mobile"/>
-      <br/>
-      <sub>Mobile</sub>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/EPISTEME_desktop.png" alt="Episteme Reader on desktop"/>
-      <br/>
-      <sub>Desktop</sub>
-    </td>
-  </tr>
-</table>
-
-## Overview
-
-Episteme Reader is a customizable reader for documents, e-books, comics, and text-heavy files. The app is designed around local-first reading, deep typography controls, flexible layouts, and a consistent Kotlin Multiplatform core across mobile and desktop.
-
-The same core reading experience is available across editions. The main differences are distribution channel, network access, and whether proprietary online services are included.
-
-## Core Features
-
-Available across supported editions unless noted in the edition table:
-
-* **Formats:** PDF, EPUB, MOBI/AZW3, FB2, DOCX, ODT/FODT, TXT, Markdown, HTML, and comic archives.
-* **Reading modes:** Paginated reading, vertical scroll, PDF multi-tab reading, PDF reflow, auto-scroll, and musician mode.
-* **PDF tools:** Ink annotations, highlighting, erasing, text annotations, and reading-focused PDF controls.
-* **Customization:** App themes, reader themes, custom local fonts, typography controls, spacing, margins, and layout tuning.
-* **Library tools:** Local folder sync, library organization, bookmarks, progress tracking, and file management.
-* **Accessibility:** System text-to-speech, app language selection, and reader settings that adapt to different reading preferences.
-
-## Editions
-
-| Edition | Platform | Network access | Distribution | Notes |
-|---|---|---|---|---|
-| **Play Store** | Android | Online-capable | [Google Play](https://play.google.com/store/apps/details?id=com.aryan.reader) | Full Android release with proprietary extras such as ML Kit OCR, cloud sync, AI tools, cloud TTS, and PDF bubble zoom. |
-| **OSS** | Android | Online-capable | [epistemereader.com](https://epistemereader.com), [GitHub](https://github.com/Aryan-Raj3112/episteme/releases), [F-Droid](https://f-droid.org/packages/com.aryan.reader.oss/), [Obtainium](https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Aryan-Raj3112/episteme) | Fully open-source Android build with OPDS, downloadable fonts, and BYOK access to AI and cloud features. |
-| **OSS Offline** | Android | Offline-only | [epistemereader.com](https://epistemereader.com), [GitHub](https://github.com/Aryan-Raj3112/episteme/releases), [Obtainium](https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Aryan-Raj3112/episteme) | Open-source Android build with network permissions removed. |
-| **Standard** | Desktop (Linux, Windows) | Online-capable | [epistemereader.com](https://epistemereader.com), [GitHub](https://github.com/Aryan-Raj3112/episteme/releases) | Full-featured desktop release with the shared KMP reader core and online-capable services. |
-| **Offline** | Desktop (Linux, Windows) | Offline-only | [epistemereader.com](https://epistemereader.com), [GitHub](https://github.com/Aryan-Raj3112/episteme/releases) | Desktop build focused on local reading with online services disabled. |
-
-Future desktop platforms can use the same Standard and Offline model as support expands.
-
-## Translations
-
-Episteme Reader translations are managed through our [self-hosted Weblate instance](https://translate.epistemereader.com/). Sign in with GitHub to contribute.
-
-<a href="https://translate.epistemereader.com/engage/episteme/"><img src="https://translate.epistemereader.com/widget/episteme/matrix-auto.svg" alt="Translation status"></a>
-
-Translation contributors are required to accept the Episteme Contributor License Agreement before submitting changes.
-
-## Building from Source
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Aryan-Raj3112/episteme.git
-   cd episteme
-   ```
-
-2. Build Android:
-   * Open in Android Studio and run the `ossDebug` or `ossOfflineDebug` variant, or
-   * Build from the command line:
-     ```bash
-     ./gradlew assembleOssDebug
-     ```
-   The APK will be generated at:
-   `app/build/outputs/apk/oss/debug/Episteme-oss-v{version}-oss-debug.apk`
-
-3. Build desktop:
-   ```bash
-   ./gradlew :desktopApp:packageReleaseDistributionForCurrentOS
-   ```
-   For the offline desktop build, pass:
-   ```bash
-   ./gradlew :desktopApp:packageReleaseDistributionForCurrentOS -PdesktopFlavor=oss
-   ```
-
-## Open Source Libraries
-
-Powered by the Kotlin, Android, and desktop OSS ecosystem:
-
-* **Core and UI:** Kotlin Multiplatform, Compose Multiplatform, AndroidX, Jetpack Compose, Kotlinx Serialization
-* **Document engines:** PdfiumAndroidKt, PDFium, libmobi
-* **Parsers:** Jsoup, Flexmark, Apache Commons Compress
-* **Media and image loading:** Coil, Media3
-* **Utilities:** Room, Timber, JNA
-
-## Contributors
-
-| Contributor | Contribution |
-|---|---|
-| <img src="https://github.com/CCerrer.png?size=48" width="24" height="24" valign="middle" alt="CCerrer avatar"> [CCerrer](https://github.com/CCerrer) | Testing and QA |
-| <img src="https://github.com/ottozumkeller.png?size=48" width="24" height="24" valign="middle" alt="ottozumkeller avatar"> [ottozumkeller](https://github.com/ottozumkeller) | German translation |
-| <img src="https://github.com/TURBOKANTR.png?size=48" width="24" height="24" valign="middle" alt="TURBOKANTR avatar"> [TURBOKANTR](https://github.com/TURBOKANTR) | Turkish translation |
-| <img src="https://github.com/eyadalkordy24.png?size=48" width="24" height="24" valign="middle" alt="eyadalkordy24 avatar"> [eyadalkordy24](https://github.com/eyadalkordy24) | Arabic translation |
-| <img src="https://github.com/berebara.png?size=48" width="24" height="24" valign="middle" alt="berebara avatar"> [berebara](https://github.com/berebara) | Russian translation |
-| <img src="https://github.com/mh4ckt3mh4ckt1c4s.png?size=48" width="24" height="24" valign="middle" alt="mh4ckt3mh4ckt1c4s avatar"> [mh4ckt3mh4ckt1c4s](https://github.com/mh4ckt3mh4ckt1c4s) | French translation |
-
-## Supporters
-
-Thank you to the people helping keep Episteme Reader moving:
-
-| Supporter | Platform |
-|---|---|
-| <img src="https://github.com/johan13220.png?size=48" width="24" height="24" valign="middle" alt="johan13220 avatar"> [ProgrammerWhoPrograms](https://github.com/johan13220) | GitHub Sponsor |
-| <img src="https://github.com/litaeusworks.png?size=48" width="24" height="24" valign="middle" alt="litaeusworks avatar"> [litaeusworks](https://github.com/litaeusworks) | Patreon Member |
-
-## Support the Project
-
-Help make Episteme Reader better:
-
-* [Sponsor on GitHub](https://github.com/sponsors/Aryan-Raj3112)
-* [Support on Patreon](https://www.patreon.com/c/epistemereader)
-* Star the repository to help visibility
-* Report bugs or request features via [GitHub Issues](https://github.com/Aryan-Raj3112/episteme/issues/new/choose)
-* Help translate [Episteme Reader](https://translate.epistemereader.com/engage/episteme/)
-* Share feedback in [Discussions](https://github.com/Aryan-Raj3112/episteme/discussions)
-* Leave a review on the [Google Play Store](https://play.google.com/store/apps/details?id=com.aryan.reader)
-* Tell a friend
-
-## License
-
-Licensed under the GNU Affero General Public License v3.0 only (AGPL-3.0-only). See the [LICENSE](../LICENSE) file.
+**修改声明（2026-11-23，文库阅读 0.1.8）** 文库阅读包含 Episteme OSS（© 2026 Episteme）的代码，起点为上游 v1.0.59-oss 的 e3008fd4。文库阅读修改了应用标识和图标、书库交互、中文 TXT 章节识别、阅读界面及 Android 构建和发布流程。上游版权声明及第三方组件各自的许可继续适用。感谢上游作者和贡献者。[上游版本](https://github.com/Aryan-Raj3112/episteme/releases/tag/v1.0.59-oss) · [第三方源码清单](licenses/THIRD-PARTY-SOURCES.txt) · [libmobi 重链接说明](licenses/RELINKING.md)

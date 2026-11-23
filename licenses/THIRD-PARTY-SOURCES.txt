@@ -1,0 +1,78 @@
+WenkuReader for Android — third-party source inventory
+
+This list covers bundled native code and assets. ANDROID-RUNTIME-SOURCES.txt
+lists the resolved Java/Kotlin/Android artifacts with versioned Maven metadata.
+Licenses and copyright notices in the corresponding source trees still apply.
+
+Project source, modifications and build instructions
+  https://github.com/locy016/WenkuReader (select the tag shown in About)
+  Upstream: Episteme OSS, © 2026 Episteme, AGPL-3.0-only
+  https://github.com/Aryan-Raj3112/episteme/tree/e3008fd4ed3bf51512af2613c168f0155b478a60
+  See README.md for the modification notice and licenses/RELINKING.md for
+  libmobi replacement and independent signing instructions.
+
+Native libraries
+  libmobi.so — libmobi, © Bartek Fabiszewski, LGPL-3.0-or-later.
+    The exact bundled source is tracked at app/src/main/cpp/libmobi.
+    Origin: https://github.com/bfabiszewski/libmobi
+    The APK includes LGPL-3.0.txt and the GPL-3.0.txt that it supplements.
+    It is linked dynamically by libnative-lib.so. Android's zlib is a
+    platform library. libxml2 and libmobi encryption are disabled.
+  libnative-lib.so — Android JNI bridge, app/src/main/cpp in this source tag.
+    Statically includes:
+    WOFF2 (MIT), app/src/main/cpp/woff2, https://github.com/google/woff2
+    Brotli (MIT), app/src/main/cpp/woff2/brotli, https://github.com/google/brotli
+    MD4C (MIT), app/src/main/cpp/md4c, https://github.com/mity/md4c
+    The three original MIT texts are packaged with these notices.
+  liboffice_oxide_bridge.so — JNI and Rust source: rust/office-oxide-bridge.
+    office_oxide 0.1.13 (MIT OR Apache-2.0):
+    https://crates.io/crates/office_oxide/0.1.13
+    Exact transitive crate versions, registries and checksums: bundled
+    OFFICE-OXIDE-Cargo.lock. Registry crate sources are available at
+    https://static.crates.io/crates/<crate>/<crate>-<version>.crate
+  libpdfiumandroid.so — io.legere:pdfiumandroid-core:2.0.0, Apache-2.0:
+    https://github.com/johngray1965/PdfiumAndroidKt/tree/d298f0faa137cd2b9b0a913080c3d5374b3671f9
+    libpdfium.so is provided as a prebuilt binary under
+    pdfiumandroid/core/src/main/jniLibs in that tag. PDFium's source:
+    https://pdfium.googlesource.com/pdfium/
+    PDFium has a BSD-style license and third-party notices in its source tree.
+    The binding tag pins the binary; it does not by itself establish the
+    Chromium PDFium source revision or every linked dependency revision.
+  libarchive-jni.so — me.zhanghai.android.libarchive:library:1.1.6 (Apache-2.0):
+    https://github.com/zhanghai/libarchive-android/tree/v1.1.6
+    See .gitmodules and library/src/main/jni at that tag. Native source pins:
+    libarchive 3.8.1 (BSD-2-Clause) https://github.com/libarchive/libarchive/tree/9525f90ca4bd14c7b335e2f8c84a4607b0af6bdf
+    bzip2 (bzip2-1.0.6 license) https://gitlab.com/bzip2/bzip2/-/tree/6a8690fc8d26c815e798c588f796eabe9d684cf0
+    xz / liblzma (0BSD) https://github.com/tukaani-project/xz/tree/a522a226545730551f7e7c2685fab27cf567746c
+    LZ4 (BSD-2-Clause for the library) https://github.com/lz4/lz4/tree/ebb370ca83af193212df4dcbadcc5d87bc0de2f0
+    Zstandard (BSD-3-Clause option) https://github.com/facebook/zstd/tree/f8745da6ff1ad1e7bab384bd1f9d742439278e99
+    Mbed TLS (Apache-2.0 option) https://github.com/Mbed-TLS/mbedtls/tree/2fc8413bfcb51354c8e679141b17b3f1a5942561
+  libandroidx.graphics.path.so — AndroidX Graphics Path, Apache-2.0:
+    https://android.googlesource.com/platform/frameworks/support/+/androidx-main/graphics/graphics-path/
+    Use the resolved graphics-path coordinate in ANDROID-RUNTIME-SOURCES.txt
+    for the versioned POM and published sources.
+
+Java/Kotlin notices
+  juniversalchardet 2.5.0 — distributed here under its GPL-3.0 option,
+    in combination with AGPL-3.0 code under section 13 of GPLv3 and AGPLv3.
+    https://github.com/albfernandez/juniversalchardet/tree/v2.5.0
+    https://repo.maven.apache.org/maven2/com/github/albfernandez/juniversalchardet/2.5.0/juniversalchardet-2.5.0-sources.jar
+  See ANDROID-RUNTIME-SOURCES.txt for the resolved module list and metadata.
+  Original license resources included by module publishers are also retained
+  where packaged. Apache-2.0.txt provides the common Apache license text.
+
+Bundled assets
+  MathJax 3.2.1: JavaScript in app/src/main/assets/mathjax; Apache-2.0.
+    https://github.com/mathjax/MathJax-src/tree/3.2.1
+  Reader fonts: files in app/src/main/assets/fonts. All five font files
+    identify SIL OFL 1.1; see Font-SIL-OFL-1.1.txt for their copyright
+    and reserved font names. Upstream families:
+    Lato https://github.com/google/fonts/tree/main/ofl/lato
+    Lexend https://github.com/google/fonts/tree/main/ofl/lexend
+    Lora https://github.com/google/fonts/tree/main/ofl/lora
+    Merriweather https://github.com/google/fonts/tree/main/ofl/merriweather
+    Roboto Mono https://github.com/googlefonts/RobotoMono
+  vendored reader illustrations, example files and texture images:
+    app/src/main/assets and related Android resources in the upstream revision
+    identified above. This inventory does not assign new licenses to assets
+    whose original creator or license is not stated in the upstream tree.

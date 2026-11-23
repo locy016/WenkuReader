@@ -23,7 +23,13 @@
     <string name="wenku_reader_format">Format</string>
     <string name="wenku_reader_progress">Progress</string>
     <string name="wenku_reader_listen">Listen</string>
-    <string name="wenku_upstream_project">Upstream project</string>
+    <string name="wenku_version_source">Source for this version</string>
+    <string name="wenku_about_product">Read books and documents offline, search and organize your library, and resume where you left off.</string>
+    <string name="wenku_license_summary">Offline licenses, credits and third-party sources</string>
+    <string name="wenku_legal_credit">WenkuReader is released under AGPL-3.0-only, without warranty. It includes work from Episteme OSS © 2026 Episteme and other components under their own licenses.</string>
+    <string name="wenku_third_party_sources">Third-party source inventory</string>
+    <string name="wenku_android_runtime_sources">Android runtime dependencies</string>
+    <string name="wenku_license_read_error">Could not open this notice.</string>
     <string name="wenku_reading_page">Page %1$d</string>
     <string name="wenku_reading_chapter">Chapter %1$d</string>
     <string name="wenku_not_started">Not started</string>

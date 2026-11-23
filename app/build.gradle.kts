@@ -7,6 +7,16 @@ import java.io.StringReader
 import java.security.MessageDigest
 import javax.xml.parsers.DocumentBuilderFactory
 import org.gradle.api.GradleException
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.PathSensitivity
@@ -22,6 +32,65 @@ plugins {
     alias(libs.plugins.kotlin.ksp)
     id("com.diffplug.spotless") version "8.2.1"
     alias(libs.plugins.kover)
+}
+
+abstract class PrepareReleaseNotices : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val noticeFiles: ConfigurableFileCollection
+
+    @get:Input
+    abstract val runtimeSources: ListProperty<String>
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun packageNotices() {
+        val dir = outputDirectory.get().asFile
+        dir.deleteRecursively()
+        val legal = dir.resolve("legal").apply { mkdirs() }
+        for (file in noticeFiles.files) {
+            val outputName = when (file.name) {
+                "LICENSE" -> "AGPL-3.0.txt"
+                "COPYING" -> "LGPL-3.0.txt"
+                "Cargo.lock" -> "OFFICE-OXIDE-Cargo.lock"
+                else -> file.name
+            }
+            file.copyTo(legal.resolve(outputName))
+        }
+        legal.resolve("ANDROID-RUNTIME-SOURCES.txt").writeText(
+            "Resolved Android runtime modules and their release metadata URLs.\n" +
+                "The adjacent -sources.jar or -sources.aar (where published) contains module sources.\n" +
+                "The POM also identifies project source control when no source archive is available.\n" +
+                "R8 may omit classes from these modules. See THIRD-PARTY-SOURCES.txt for assets and native code.\n\n" +
+                runtimeSources.get().joinToString("\n\n", postfix = "\n"),
+        )
+    }
+}
+
+fun runtimeSourceEntries(root: ResolvedComponentResult): List<String> {
+    val modules = sortedMapOf<String, String>()
+    val seen = mutableSetOf(root.id)
+    val pending = ArrayDeque(listOf(root))
+    while (pending.isNotEmpty()) {
+        val component = pending.removeFirst()
+        val id = component.id
+        if (id is ModuleComponentIdentifier) {
+            val repository = when {
+                id.group.startsWith("androidx.") || id.group.startsWith("com.android.") ->
+                    "https://dl.google.com/dl/android/maven2"
+                else -> "https://repo.maven.apache.org/maven2"
+            }
+            val coordinates = "${id.group}:${id.module}:${id.version}"
+            val path = "${id.group.replace('.', '/')}/${id.module}/${id.version}"
+            modules[coordinates] = "$coordinates\n$repository/$path/${id.module}-${id.version}.pom"
+        }
+        for (dependency in component.dependencies.filterIsInstance<ResolvedDependencyResult>()) {
+            if (seen.add(dependency.selected.id)) pending.add(dependency.selected)
+        }
+    }
+    return modules.values.toList()
 }
 
 val localProperties = Properties()
@@ -88,8 +157,9 @@ android {
         applicationId = "app.juanzhou.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 28
-        versionName = "0.1.7"
+        versionCode = 29
+        versionName = "0.1.8"
+        buildConfigField("String", "WENKU_SOURCE_TAG", "\"v${versionName}\"")
 
         if (prebuiltNativeDir != null) {
             val abis = prebuiltNativeDir.listFiles().orEmpty()
@@ -150,10 +220,12 @@ android {
 
     buildTypes {
         debug {
-            versionNameSuffix = "-dev.28"
+            versionNameSuffix = "-dev.29"
         }
 
         release {
+            // The tested build precedes its commit; About identifies the source tag.
+            vcsInfo.include = false
             val storePath = localProperties.getProperty("MYAPP_RELEASE_STORE_FILE")
             if (!storePath.isNullOrEmpty()) {
                 signingConfig = signingConfigs.getByName("release")
@@ -228,6 +300,24 @@ android {
 
 androidComponents {
     onVariants(selector().all()) { variant ->
+        val notices = tasks.register<PrepareReleaseNotices>(
+            "prepare${variant.name.replaceFirstChar { it.uppercase() }}Notices",
+        ) {
+            noticeFiles.from(
+                rootProject.layout.projectDirectory.file("LICENSE"),
+                layout.projectDirectory.file("src/main/cpp/libmobi/COPYING"),
+                rootProject.layout.projectDirectory.file("licenses/GPL-3.0.txt"),
+                rootProject.layout.projectDirectory.file("licenses/THIRD-PARTY-SOURCES.txt"),
+                rootProject.layout.projectDirectory.file("rust/office-oxide-bridge/Cargo.lock"),
+                fileTree(rootProject.layout.projectDirectory.dir("licenses/notices")) { include("*.txt") },
+            )
+            runtimeSources.set(
+                variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map(::runtimeSourceEntries),
+            )
+            outputDirectory.set(layout.buildDirectory.dir("generated/wenkuNotices/${variant.name}"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(notices, PrepareReleaseNotices::outputDirectory)
+
         if (prebuiltNativeDir != null && variant.buildType != "debug") {
             tasks.matching { it.name == "pre${variant.name.replaceFirstChar { it.uppercase() }}Build" }
                 .configureEach {

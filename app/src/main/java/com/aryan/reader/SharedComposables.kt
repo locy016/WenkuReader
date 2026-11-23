@@ -682,29 +682,37 @@ private fun SharedText.resolveAndroidText(context: Context): String {
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
-    val isOss = BuildConfig.FLAVOR == "oss"
+    var showNotices by remember { mutableStateOf(false) }
+    val sourceTag = BuildConfig.WENKU_SOURCE_TAG
+    if (showNotices) {
+        WenkuLegalDialog(onDismiss = { showNotices = false })
+        return
+    }
     com.aryan.reader.shared.ui.SharedAndroidAboutDialog(
         strings = com.aryan.reader.shared.ui.SharedAndroidAboutStrings(
             appName = stringResource(R.string.about_app_name),
             flavorLabel = "",
             versionLabel = stringResource(R.string.about_version_name, BuildConfig.VERSION_NAME),
             buildLabel = "",
-            githubTitle = stringResource(R.string.wenku_upstream_project),
-            githubDescription = "Episteme OSS",
+            githubTitle = stringResource(R.string.wenku_version_source),
+            githubDescription = "GitHub · $sourceTag",
+            productDescription = stringResource(R.string.wenku_about_product),
             privacyTitle = stringResource(R.string.legal_privacy_policy),
             privacyDescription = stringResource(R.string.about_privacy_desc),
             termsTitle = stringResource(R.string.legal_terms_of_service),
             termsDescription = stringResource(R.string.about_terms_desc),
             licensesTitle = stringResource(R.string.legal_licenses),
-            licensesDescription = stringResource(R.string.about_licenses_desc),
+            licensesDescription = stringResource(R.string.wenku_license_summary),
             closeAction = stringResource(R.string.action_close),
         ),
-        showGitHub = isOss,
+        showGitHub = true,
         onDismiss = onDismiss,
-        onGitHubClick = { uriHandler.openUri("https://github.com/Aryan-Raj3112/episteme") },
+        onGitHubClick = {
+            uriHandler.openUri("https://github.com/locy016/WenkuReader/tree/$sourceTag")
+        },
         onPrivacyClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
         onTermsClick = { uriHandler.openUri(TERMS_URL) },
-        onLicensesClick = { uriHandler.openUri(LICENSES_URL) },
+        onLicensesClick = { showNotices = true },
         githubIcon = {
             Icon(
                 painterResource(R.drawable.github),

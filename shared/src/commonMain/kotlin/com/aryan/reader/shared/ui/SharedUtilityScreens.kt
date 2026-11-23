@@ -109,6 +109,7 @@ data class SharedAndroidAboutStrings(
     val licensesTitle: String,
     val licensesDescription: String,
     val closeAction: String,
+    val productDescription: String = "",
 )
 
 /** Exact Android About dialog with flavor/build strings and platform links injected. */
@@ -144,6 +145,10 @@ fun SharedAndroidAboutDialog(
                 Text(strings.versionLabel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 if (strings.buildLabel.isNotBlank()) {
                     Text(strings.buildLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (strings.productDescription.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(strings.productDescription, style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.height(20.dp))
                 if (showGitHub) {

@@ -23,7 +23,13 @@
     <string name="wenku_reader_format">排版</string>
     <string name="wenku_reader_progress">进度</string>
     <string name="wenku_reader_listen">朗读</string>
-    <string name="wenku_upstream_project">上游项目</string>
+    <string name="wenku_version_source">本版本源码</string>
+    <string name="wenku_about_product">离线阅读电子书和文档，分类整理和搜索书库，随时从上次位置继续阅读。</string>
+    <string name="wenku_license_summary">可离线查看许可、致谢和第三方源码</string>
+    <string name="wenku_legal_credit">文库阅读按 AGPL-3.0-only 提供，使用条款见许可证，软件不附担保。包含 Episteme OSS（© 2026 Episteme）及其他按各自许可提供的组件。</string>
+    <string name="wenku_third_party_sources">第三方源码清单</string>
+    <string name="wenku_android_runtime_sources">Android 运行时依赖</string>
+    <string name="wenku_license_read_error">无法打开此许可文件。</string>
     <string name="wenku_reading_page">第 %1$d 页</string>
     <string name="wenku_reading_chapter">第 %1$d 章</string>
     <string name="wenku_not_started">尚未阅读</string>
