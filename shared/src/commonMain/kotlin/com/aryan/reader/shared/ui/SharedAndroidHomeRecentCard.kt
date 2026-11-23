@@ -55,7 +55,7 @@ fun SharedAndroidHomeRecentCard(
     onLongClick: () -> Unit,
     cover: @Composable (Modifier) -> Unit,
     statusBadges: @Composable (Modifier) -> Unit,
-    fileTypeBadge: @Composable () -> Unit,
+    fileTypeBadge: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
@@ -128,19 +128,21 @@ fun SharedAndroidHomeRecentCard(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = if (compact) 2.dp else 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    fileTypeBadge()
-                    progressPercent?.let {
-                        Text(
-                            "$it%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
+                if (fileTypeBadge != null || progressPercent != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = if (compact) 2.dp else 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        fileTypeBadge?.invoke()
+                        progressPercent?.let {
+                            Text(
+                                "$it%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

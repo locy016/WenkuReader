@@ -51,7 +51,8 @@ fun ThemedBookCover(
     item: RecentFileItem,
     modifier: Modifier = Modifier,
     contentDescription: String? = item.displayName,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    showFileType: Boolean = false,
 ) {
     val context = LocalContext.current
     val coverDescription = contentDescription
@@ -137,9 +138,18 @@ fun ThemedBookCover(
                 GeneratedBookCover(
                     item = item,
                     palette = palette,
+                    showFileType = showFileType,
                     modifier = face.clearAndSetSemantics {
                         coverDescription?.let { this.contentDescription = it }
                     },
+                )
+            }
+            if (showFileType) {
+                FileTypeBadge(
+                    type = item.type,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(3.dp),
+                    overlay = true,
+                    compact = true,
                 )
             }
         }
@@ -150,6 +160,7 @@ fun ThemedBookCover(
 private fun GeneratedBookCover(
     item: RecentFileItem,
     palette: CoverPalette,
+    showFileType: Boolean,
     modifier: Modifier = Modifier
 ) {
     val title = remember(item.customName, item.title, item.displayName) { item.coverTitle() }
@@ -206,11 +217,14 @@ private fun GeneratedBookCover(
         }
         if (author != null && maxWidth >= 54.dp && maxHeight >= 76.dp) {
             val authorSize = (titleSize * 0.72f).coerceIn(7f, 11f)
+            val badgeClearance = if (showFileType) {
+                with(LocalDensity.current) { CoverFileTypeLineHeight.toDp() } + 6.dp
+            } else 0.dp
             Text(
                 text = author,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(bottom = maxHeight * 0.13f)
+                    .padding(bottom = maxOf(maxHeight * 0.13f, badgeClearance))
                     .then(textArea),
                 color = lerp(CoverInk, palette.paper, 0.34f),
                 style = titleStyle.copy(

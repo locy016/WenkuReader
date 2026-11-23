@@ -270,7 +270,9 @@ internal fun UnifiedLibraryHome(
     val context = LocalContext.current
     val bookGroups = remember(books, context, query.isBlank()) {
         if (query.isNotBlank()) emptyList() else books.groupBy { it.libraryBookGroup() }
-            .entries.sortedWith(compareBy({ it.key.category.ordinal }, { it.key.tagLabel.orEmpty() }))
+            .entries.sortedWith(compareBy(
+                { it.key.category.ordinal }, { it.key.tagLabel.orEmpty() }, { it.key.fileType?.name.orEmpty() },
+            ))
             .map { (group, items) ->
                 SharedAndroidLibraryGroup(group.id, group.label(context), libraryCategoryAccent(group.category), items)
             }

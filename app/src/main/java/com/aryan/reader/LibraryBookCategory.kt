@@ -24,13 +24,26 @@ internal enum class LibraryBookCategory(val labelRes: Int, val paletteIndex: Int
     }
 }
 
-internal data class LibraryBookGroup(val category: LibraryBookCategory, val tagLabel: String? = null) {
-    val id: String get() = tagLabel?.let { "tag:$it" } ?: category.name
-    fun label(context: Context): String = tagLabel ?: context.getString(category.labelRes)
+internal data class LibraryBookGroup(
+    val category: LibraryBookCategory,
+    val tagLabel: String? = null,
+    val fileType: FileType? = null,
+) {
+    val id: String
+        get() {
+            val categoryId = tagLabel?.let { "tag:$it" } ?: category.name
+            return fileType?.let { "format:${it.name}:$categoryId" } ?: categoryId
+        }
+
+    fun label(context: Context): String {
+        val categoryLabel = tagLabel ?: context.getString(category.labelRes)
+        return fileType?.let { "$categoryLabel · ${it.name}" } ?: categoryLabel
+    }
 }
 
 internal fun RecentFileItem.libraryBookGroup(): LibraryBookGroup {
-    LibraryBookCategory.fromId(libraryCategoryId)?.let { return LibraryBookGroup(it) }
+    val separateFileType = type.takeIf { it == FileType.TXT || it == FileType.EPUB }
+    LibraryBookCategory.fromId(libraryCategoryId)?.let { return LibraryBookGroup(it, fileType = separateFileType) }
     val formatCategory = when (type) {
         FileType.CBZ, FileType.CBR, FileType.CB7, FileType.CBT -> LibraryBookCategory.COMICS
         FileType.PDF, FileType.DOC, FileType.DOCX, FileType.ODT, FileType.FODT,
@@ -39,13 +52,14 @@ internal fun RecentFileItem.libraryBookGroup(): LibraryBookGroup {
         else -> LibraryBookCategory.OTHER
     }
     val tag = tags.mapNotNull { it.name.trim().takeIf(String::isNotEmpty) }.minOrNull()
-        ?: return LibraryBookGroup(formatCategory)
+        ?: return LibraryBookGroup(formatCategory, fileType = separateFileType)
     val categoryStyle = when {
         listOf("小说", "文学", "玄幻", "故事", "fiction").any { tag.contains(it, ignoreCase = true) } -> LibraryBookCategory.FICTION
         listOf("历史", "传记", "history").any { tag.contains(it, ignoreCase = true) } -> LibraryBookCategory.HISTORY
         listOf("经管", "经济", "社科", "商业", "business").any { tag.contains(it, ignoreCase = true) } -> LibraryBookCategory.BUSINESS
         listOf("学习", "教材", "教程", "study").any { tag.contains(it, ignoreCase = true) } -> LibraryBookCategory.STUDY
-        else -> formatCategory
+        // A tag uses a consistent category style across file formats.
+        else -> LibraryBookCategory.OTHER
     }
-    return LibraryBookGroup(categoryStyle, tag)
+    return LibraryBookGroup(categoryStyle, tag, separateFileType)
 }

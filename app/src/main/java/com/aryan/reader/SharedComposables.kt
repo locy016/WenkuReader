@@ -793,6 +793,8 @@ fun AutoSizeText(
     )
 }
 
+internal val CoverFileTypeLineHeight = 12.sp
+
 @Composable
 fun FileTypeBadge(
     type: FileType,
@@ -800,28 +802,40 @@ fun FileTypeBadge(
     overlay: Boolean = false,
     compact: Boolean = false
 ) {
+    val coverBadge = overlay && compact
     val containerColor = if (overlay) Color.Black.copy(alpha = 0.6f) else MaterialTheme.colorScheme.secondaryContainer
     val contentColor = if (overlay) Color.White else MaterialTheme.colorScheme.onSecondaryContainer
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(50),
+        shape = if (coverBadge) LibrarySurfaceShape else RoundedCornerShape(50),
         color = containerColor,
         contentColor = contentColor,
-        border = if (overlay) BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)) else null
+        border = if (overlay) BorderStroke(if (coverBadge) 0.5.dp else 1.dp, Color.White.copy(alpha = 0.3f)) else null
     ) {
         Text(
             text = if (type == FileType.UNKNOWN) "FILE" else type.name.uppercase(),
-            style = if (compact) {
-                MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 0.sp)
-            } else {
-                MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp)
+            style = when {
+                coverBadge -> MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp, lineHeight = CoverFileTypeLineHeight, letterSpacing = 0.sp,
+                )
+                compact -> MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 0.sp)
+                else -> MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp)
             },
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1,
+            overflow = if (coverBadge) TextOverflow.Ellipsis else TextOverflow.Clip,
             modifier = Modifier.padding(
-                horizontal = if (compact) 6.dp else 10.dp,
-                vertical = if (compact) 3.dp else 4.dp
+                horizontal = when {
+                    coverBadge -> 3.dp
+                    compact -> 6.dp
+                    else -> 10.dp
+                },
+                vertical = when {
+                    coverBadge -> 1.dp
+                    compact -> 3.dp
+                    else -> 4.dp
+                },
             )
         )
     }

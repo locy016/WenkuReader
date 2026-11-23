@@ -118,6 +118,7 @@ fun RecentFileCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = coverModifier.recordLibraryCover(coverTap),
+                showFileType = true,
             )
         },
         statusBadges = { badgeModifier ->
@@ -127,9 +128,6 @@ fun RecentFileCard(
                 overlay = true,
                 modifier = badgeModifier,
             )
-        },
-        fileTypeBadge = {
-            FileTypeBadge(type = item.type, compact = true)
         },
     )
 }

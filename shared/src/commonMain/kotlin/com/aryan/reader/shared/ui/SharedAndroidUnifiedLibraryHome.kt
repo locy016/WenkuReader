@@ -256,9 +256,11 @@ fun <T> SharedAndroidUnifiedLibraryHome(
                         if (bookGroups.isEmpty()) {
                             items(books, key = itemKey) { bookCard(it) }
                         } else {
+                            val allowSideBySideGroups = fixedBookColumns == null &&
+                                widthClass != SharedAndroidHomeWidthClass.COMPACT
                             var nextSmallGroupOnRight = false
                             bookGroups.forEach { group ->
-                                if (widthClass != SharedAndroidHomeWidthClass.COMPACT && group.books.size <= 2) {
+                                if (allowSideBySideGroups && group.books.size <= 2) {
                                     val right = nextSmallGroupOnRight
                                     nextSmallGroupOnRight = !right
                                     item(
@@ -271,7 +273,6 @@ fun <T> SharedAndroidUnifiedLibraryHome(
                                             group,
                                             widthClass,
                                             bookGridSpacing,
-                                            fixedBookColumns?.let { smallLibraryGroupSpan(it, right) },
                                             bookCard,
                                         )
                                     }
@@ -302,13 +303,12 @@ private fun <T> SmallLibraryGridGroup(
     group: SharedAndroidLibraryGroup<T>,
     widthClass: SharedAndroidHomeWidthClass,
     spacing: DpSize,
-    fixedGroupColumns: Int?,
     bookCard: @Composable (T) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = spacing.width
         val minimumColumns = if (gap == SharedMobileBookGridSpacing) 3 else group.books.size
-        val columns = fixedGroupColumns ?: widthClass.bookGridColumns(maxWidth, gap, minimumColumns = minimumColumns)
+        val columns = widthClass.bookGridColumns(maxWidth, gap, minimumColumns = minimumColumns)
         val cardWidth = (maxWidth - gap * (columns - 1)) / columns
         Column(verticalArrangement = Arrangement.spacedBy(maxOf(12.dp, spacing.height * 0.65f))) {
             LibraryGroupHeading(group)

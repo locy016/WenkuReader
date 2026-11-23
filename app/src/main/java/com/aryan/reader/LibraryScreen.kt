@@ -100,6 +100,7 @@ internal fun LibraryListItem(
                 contentDescription = item.displayName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().recordLibraryCover(coverTap),
+                showFileType = true,
             )
             if (isSelected) {
                 Box(
@@ -145,7 +146,6 @@ internal fun LibraryListItem(
             }
         },
         metadata = {
-            FileTypeBadge(type = item.type, compact = true)
             if (item.tags.isNotEmpty()) {
                 BookTagChipsRow(
                     tags = item.tags,

@@ -1,12 +1,18 @@
 package com.aryan.reader
 
 import android.content.Context
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.aryan.reader.data.RecentFileItem
+import com.aryan.reader.shared.ui.SharedAndroidHomeWidthClass
+import com.aryan.reader.shared.ui.SharedAndroidLibraryGroup
+import com.aryan.reader.shared.ui.SharedAndroidUnifiedHomeStrings
+import com.aryan.reader.shared.ui.SharedAndroidUnifiedLibraryHome
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -114,6 +124,88 @@ class HomeRecentFileCardTest {
         // the unavailable overlay does not change the card's height, not that it is pixel-identical.
         assertThat(availableHeight).isWithin(1f).of(unavailableHeight)
     }
+
+    @Test
+    fun gridAndListShowFileTypesAtTheBottomStartOfTheirCovers() {
+        val gridBook = recentBook("grid", "Grid book", "Example Author", 0f)
+        val listBook = recentBook("list", "List book", "", 0f).copy(type = FileType.PDF)
+        composeTestRule.setContent {
+            MaterialTheme {
+                Column {
+                    RecentFileCard(
+                        item = gridBook,
+                        isSelected = false,
+                        modifier = Modifier.width(98.dp),
+                        onClick = {},
+                        onLongClick = {},
+                        isDownloading = false,
+                        compact = true,
+                    )
+                    LibraryListItem(
+                        item = listBook,
+                        isSelected = false,
+                        onItemClick = {},
+                        onItemLongClick = {},
+                        isDownloading = false,
+                    )
+                }
+            }
+        }
+
+        val gridTitle = boundsOf("Grid book")
+        val gridBadge = boundsOf("EPUB")
+        assertThat(gridBadge.bottom).isLessThan(gridTitle.top)
+        assertThat(gridBadge.center.x).isLessThan(gridTitle.center.x)
+
+        val listCover = composeTestRule.onNodeWithContentDescription(listBook.displayName, useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val listBadge = boundsOf("PDF")
+        assertThat(listBadge.center.x).isLessThan(listCover.center.x)
+        assertThat(listBadge.top).isGreaterThan(listCover.center.y)
+        assertThat(listBadge.bottom).isLessThan(listCover.bottom)
+    }
+
+    @Test
+    fun fixedFiveColumnGridStartsEachCategoryOnItsOwnRow() {
+        val ebooks = listOf("Book 1", "Book 2", "Book 3", "Book 4", "Book 5", "Book 6", "Book 7")
+        val documents = listOf("Document")
+        composeTestRule.setContent {
+            MaterialTheme {
+                SharedAndroidUnifiedLibraryHome(
+                    books = ebooks + documents,
+                    continueReading = null,
+                    filter = UnifiedLibraryFilter.ALL,
+                    sortLabel = "Recent",
+                    advancedFilterCount = 0,
+                    useListView = false,
+                    strings = SharedAndroidUnifiedHomeStrings("Empty", "Filter", "Grid", "List", emptyMap()),
+                    itemKey = { it },
+                    onFilterChange = {},
+                    onControls = {},
+                    onAdvancedFilters = {},
+                    onListViewChange = {},
+                    continueCard = { _, _ -> },
+                    bookCard = { Text(it, Modifier.height(32.dp)) },
+                    bookListItem = { Text(it) },
+                    widthClass = SharedAndroidHomeWidthClass.MEDIUM,
+                    fixedBookColumns = 5,
+                    showControls = false,
+                    bookGroups = listOf(
+                        SharedAndroidLibraryGroup("ebooks", "E-books", Color.Green, ebooks),
+                        SharedAndroidLibraryGroup("documents", "Documents", Color.Blue, documents),
+                    ),
+                )
+            }
+        }
+
+        assertThat(boundsOf("Book 5").top).isEqualTo(boundsOf("Book 1").top)
+        assertThat(boundsOf("Book 6").top).isGreaterThan(boundsOf("Book 5").top)
+        assertThat(boundsOf("Documents").top).isGreaterThan(boundsOf("Book 7").bottom)
+        assertThat(boundsOf("Document").left).isEqualTo(boundsOf("Book 1").left)
+    }
+
+    private fun boundsOf(text: String) = composeTestRule.onNodeWithText(text, useUnmergedTree = true)
+        .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
 
     private fun setRecentFileCard(
         item: RecentFileItem,

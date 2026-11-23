@@ -2,6 +2,7 @@ package com.aryan.reader
 
 import com.aryan.reader.shared.calculateSharedTtsAudiobookProgress
 import com.aryan.reader.data.RecentFileItem
+import com.aryan.reader.data.TagEntity
 import com.aryan.reader.data.AudiobookImporter
 import com.aryan.reader.audiobook.audiobookResumePosition
 import com.aryan.reader.audiobook.formatSleepTimerLabel
@@ -39,6 +40,39 @@ class UnifiedLibraryScreenTest {
         assertEquals(listOf("Reading Kotlin"), filterUnifiedLibraryBooks(books, UnifiedLibraryFilter.READING, "").map { it.displayName })
         assertEquals(listOf("Finished"), filterUnifiedLibraryBooks(books, UnifiedLibraryFilter.FINISHED, "finish").map { it.displayName })
         assertEquals(listOf("Unread"), filterUnifiedLibraryBooks(books, UnifiedLibraryFilter.UNREAD, "").map { it.displayName })
+    }
+
+    @Test
+    fun sameTagCreatesOneGroupAcrossBookFormats() {
+        val tag = TagEntity(id = "reference", name = "Reference", color = null, createdAt = 1L)
+        val mobi = book("Field Guide", null).copy(type = FileType.MOBI, tags = listOf(tag))
+        val pdf = mobi.copy(bookId = "notes", type = FileType.PDF, displayName = "Notes.pdf")
+
+        val groups = listOf(mobi, pdf).groupBy { it.libraryBookGroup() }
+
+        assertEquals(mapOf(LibraryBookGroup(LibraryBookCategory.OTHER, tag.name) to listOf(mobi, pdf)), groups)
+        assertEquals(LibraryBookCategory.DOCUMENTS, pdf.copy(tags = emptyList()).libraryBookGroup().category)
+    }
+
+    @Test
+    fun txtAndEpubStaySeparateWithAutomaticTaggedAndManualCategories() {
+        val tag = TagEntity(id = "reference", name = "Reference", color = null, createdAt = 1L)
+        val epub = book("Field Guide", null)
+        val variants = listOf(
+            epub,
+            epub.copy(tags = listOf(tag)),
+            epub.copy(libraryCategoryId = LibraryBookCategory.FICTION.name),
+        )
+
+        for (variant in variants) {
+            val epubGroup = variant.libraryBookGroup()
+            val txtGroup = variant.copy(type = FileType.TXT).libraryBookGroup()
+            assertEquals(epubGroup.category, txtGroup.category)
+            assertEquals(epubGroup.tagLabel, txtGroup.tagLabel)
+            assertEquals(FileType.EPUB, epubGroup.fileType)
+            assertEquals(FileType.TXT, txtGroup.fileType)
+            assertTrue(epubGroup.id != txtGroup.id)
+        }
     }
 
     @Test
