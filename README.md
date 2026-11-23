@@ -1,3 +1,8 @@
+## 文库阅读开发
+
+- [开发、验收与 USB 发布手册](DEVELOPMENT.md)
+- [项目开发约束](AGENTS.md)
+
 <div align="center">
 
   <h1>
