@@ -157,10 +157,8 @@ import com.aryan.reader.shared.MobileImportOutcome
 import com.aryan.reader.shared.record
 import com.aryan.reader.shared.MobileExternalFileCloseAction
 import com.aryan.reader.shared.mobileExternalFileCloseAction
-import com.aryan.reader.shared.MobileReaderSessionRestoreAction
 import com.aryan.reader.shared.MAX_SYNCED_FOLDER_COUNT
 import com.aryan.reader.shared.SyncedFolderAddDecision
-import com.aryan.reader.shared.AppShelfAction
 import com.aryan.reader.shared.AppReaderSessionAction
 import com.aryan.reader.shared.PdfSplitOrientation
 import com.aryan.reader.shared.PdfSplitPane
@@ -337,7 +335,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     private val feedbackRepository = appGraph.feedbackRepository
     private val libraryStateProjector = LibraryStateProjector(AndroidFolderPathResolver())
     private val libraryMutationController by lazy {
-        appGraph.libraryMutationController(::syncShelfChangeToFirestore)
+        appGraph.libraryMutationController()
     }
     private var feedbackListener: Any? = null
     private val importMutex = Mutex()
@@ -399,7 +397,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Runs [block] on IO after the library DB emits plus [delayMillis].
-     * Keeps folder-sync sweeps, cloud fan-out, and session restore off the
+     * Keeps folder-sync sweeps and cloud fan-out off the
      * first-frame critical path. Timing only — no work is skipped.
      */
     private fun launchPostLibraryReady(
@@ -702,14 +700,9 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     private val _internalState = MutableStateFlow(
         ReaderScreenState(
             renderMode = try {
-                val savedRenderModeName = prefs.getString(
-                    KEY_RENDER_MODE, RenderMode.VERTICAL_SCROLL.name
-                )
-                RenderMode.valueOf(
-                    savedRenderModeName ?: RenderMode.VERTICAL_SCROLL.name
-                )
+                prefs.getString(KEY_RENDER_MODE, null)?.let(RenderMode::valueOf) ?: RenderMode.PAGINATED
             } catch (_: IllegalArgumentException) {
-                RenderMode.VERTICAL_SCROLL
+                RenderMode.PAGINATED
             },
             libraryState = LibraryState(
                 sortOrder = try {
@@ -740,24 +733,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 recentLimit = prefs.getInt(KEY_RECENT_FILES_LIMIT, 0),
                 searchInsideFiles = prefs.getBoolean(KEY_SEARCH_INSIDE_FILES, false),
             ),
-            shelfState = AppShelfState(
-                // Library Beta navigates shelves inside its own section, so a shelf id
-                // persisted by a release that still had the standalone Library screen
-                // must not be restored — there is no longer a screen to restore it into.
-                viewingShelfId = null,
-                isAddingBooks = prefs.getBoolean(KEY_LAST_ADDING_BOOKS_TO_SHELF, false),
-                addBooksSource = try {
-                    val savedSourceName = prefs.getString(
-                        KEY_ADD_BOOKS_SOURCE, AddBooksSource.UNSHELVED.name
-                    )
-                    AddBooksSource.valueOf(savedSourceName ?: AddBooksSource.UNSHELVED.name)
-                } catch (_: IllegalArgumentException) {
-                    AddBooksSource.UNSHELVED
-                },
-            ),
             mainScreenStartPage = prefs.getInt(KEY_MAIN_SCREEN_START_PAGE, 0).coerceIn(0, 2),
-            unifiedLibrarySection = prefs.getInt(KEY_UNIFIED_LIBRARY_SECTION, 0)
-                .coerceIn(0, 4),
             unifiedLibraryListView = prefs.getBoolean(KEY_UNIFIED_LIBRARY_LIST_VIEW, false),
             pdfSplitWorkspace = restoredPdfSplitWorkspace,
             currentUser = authRepository.getSignedInUser(),
@@ -913,8 +889,64 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         ::Pair
     )
 
+    private val removedLibraryBookIds = MutableStateFlow(
+        prefs.getStringSet("wenku_removed_library_books", emptySet()).orEmpty().toSet()
+    )
+    private val categoryPreferences = appContext.getSharedPreferences("wenku_book_categories", Context.MODE_PRIVATE)
+    private val bookCategoryIds = MutableStateFlow(
+        categoryPreferences.all.mapNotNull { (id, value) -> (value as? String)?.let { id to it } }.toMap()
+    )
+    private val presentedLibraryFlow = combine(libraryFlow, removedLibraryBookIds, bookCategoryIds) { (books, shelves, refs), removed, categories ->
+        if (removed.isEmpty() && categories.isEmpty()) Triple(books, shelves, refs)
+        else Triple(
+            books.asSequence().filterNot { it.bookId in removed }.map { item ->
+                categories[item.bookId]?.let { item.copy(libraryCategoryId = it) } ?: item
+            }.toList(),
+            shelves,
+            refs,
+        )
+    }
+    val removedLibraryBooks = combine(bookStore.getRecentFilesFlow(), removedLibraryBookIds) { books, removed ->
+        books.filter { it.bookId in removed }.sortedBy { it.cardTitle() }
+    }
+
+    @Synchronized
+    private fun changeRemovedLibraryBooks(bookIds: Set<String>, remove: Boolean): Boolean {
+        val previous = removedLibraryBookIds.value
+        val next = if (remove) previous + bookIds else previous - bookIds
+        if (next == previous) return false
+        prefs.edit { putStringSet("wenku_removed_library_books", next) }
+        removedLibraryBookIds.value = next
+        return true
+    }
+
+    fun restoreLibraryBook(bookId: String) {
+        changeRemovedLibraryBooks(setOf(bookId), remove = false)
+    }
+
+    fun removeContextualBooksFromLibrary() {
+        val selectedIds = _internalState.value.contextualActionItems.mapTo(mutableSetOf()) { it.bookId }
+        if (changeRemovedLibraryBooks(selectedIds, remove = true)) {
+            _internalState.update { it.withClearedLibraryBookSelection() }
+            selectedIds.forEach(::closeTab)
+            showBanner(appContext.getString(R.string.wenku_removed_from_library))
+        }
+    }
+
+    internal fun setContextualLibraryCategory(category: LibraryBookCategory?) {
+        val ids = _internalState.value.contextualActionItems.map { it.bookId }.toSet()
+        if (ids.isEmpty()) return
+        categoryPreferences.edit {
+            ids.forEach { id -> if (category == null) remove(id) else putString(id, category.name) }
+        }
+        bookCategoryIds.update { current ->
+            if (category == null) current - ids else current + ids.associateWith { category.name }
+        }
+        clearContextualAction()
+    }
+
     open val uiState: StateFlow<ReaderScreenState> = combine(
-        _internalState, libraryFlow, tagFlow
+        _internalState, presentedLibraryFlow, tagFlow
     ) { internalState, (recentFilesFromDb, dbShelves, shelfRefs), (dbTags, tagRefs) ->
         withContext(Dispatchers.Default) {
             libraryStateProjector.project(
@@ -996,7 +1028,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         Timber.tag("PdfTabSync").d("ViewModel: ActiveTab updated to $bookId. URI found: ${uri != null}")
 
         uri?.let {
-            persistReaderSession(bookId, item.type)
             Timber.tag(PDF_RENAME_TRACE_TAG).i(
                 "viewModel.switchTab bookId=$bookId type=${item.type} uri=$it " +
                     "displayName=${item.displayName} title=${item.title} customName=${item.customName} " +
@@ -1203,7 +1234,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 isOpeningFromTtsNotification = false,
             )
         }
-        clearPersistedReaderSession()
     }
 
     /** Opens a second library PDF beside the currently selected PDF. */
@@ -1403,7 +1433,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun activatePdfPane(item: RecentFileItem) {
         val uri = item.getUri() ?: return
-        persistReaderSession(item.bookId, item.type)
         _internalState.update { state ->
             val prepared = state.copy(
                 selectedPdfUri = uri,
@@ -1446,40 +1475,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun closeTagSelection() {
         _internalState.update { it.copy(showTagSelectionDialogFor = emptySet()) }
-    }
-
-    fun openAddSelectedToShelf(bookIds: Set<String>) {
-        val sanitizedBookIds = SharedLibraryEditor.cleanBookIds(bookIds)
-        if (sanitizedBookIds.isEmpty()) return
-        _internalState.update { it.copy(showAddSelectedToShelfDialogFor = sanitizedBookIds) }
-    }
-
-    fun closeAddSelectedToShelf() {
-        _internalState.update { it.copy(showAddSelectedToShelfDialogFor = emptySet()) }
-    }
-
-    fun addSelectedBooksToShelves(shelfIds: Set<String>, bookIds: Set<String>) {
-        val sanitizedBookIds = SharedLibraryEditor.cleanBookIds(bookIds)
-        val mutableManualShelfIds = uiState.value.shelves
-            .filter { shelf -> shelf.type == ShelfType.MANUAL && SharedLibraryEditor.canMutateShelf(shelf.id) }
-            .mapTo(mutableSetOf()) { shelf -> shelf.id }
-        val sanitizedShelfIds = shelfIds
-            .mapNotNullTo(linkedSetOf()) { shelfId ->
-                shelfId.trim().takeIf { it in mutableManualShelfIds }
-            }
-        if (sanitizedBookIds.isEmpty() || sanitizedShelfIds.isEmpty()) {
-            closeAddSelectedToShelf()
-            return
-        }
-
-        viewModelScope.launch {
-            libraryMutationController.addBooksToShelves(sanitizedBookIds, sanitizedShelfIds)
-            _internalState.update {
-                it.copy(
-                    showAddSelectedToShelfDialogFor = emptySet(),
-                ).withClearedLibraryBookSelection()
-            }
-        }
     }
 
     suspend fun getFileInfoItem(bookId: String): RecentFileItem? {
@@ -1669,45 +1664,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                     isSearchActive = false,
                     libraryState = it.libraryState.reduce(SharedLibraryAction.SearchChanged("")),
                 )
-            }
-        }
-    }
-
-    fun streamOpdsBook(
-        bookId: String,
-        title: String,
-        urlTemplate: String,
-        pageCount: Int,
-        catalogId: String?
-    ) {
-        val encodedUrl = Uri.encode(urlTemplate)
-        val safeId = Uri.encode(bookId)
-        val catId = catalogId?.let { "&catalogId=${Uri.encode(it)}" } ?: ""
-
-        val uriString = "opds-pse://stream?id=$safeId&count=$pageCount&url=$encodedUrl$catId"
-        openBook(uriString.toUri(), bookId, FileType.CBZ, title)
-    }
-
-    fun deleteStreamedBooksForCatalog(catalogId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val filesToDelete = bookStore.getAllFilesForSync().filter {
-                it.uriString?.contains("catalogId=$catalogId") == true
-            }
-            if (filesToDelete.isNotEmpty()) {
-                val ids = filesToDelete.map { it.bookId }
-                ids.forEach { bookId ->
-                    cleanupBookDataLocally(bookId)
-                    try {
-                        val cacheDir = File(appContext.cacheDir, "opds_stream_${bookId.hashCode()}")
-                        if (cacheDir.exists()) cacheDir.deleteRecursively()
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to clean stream cache for $bookId")
-                    }
-                }
-                bookStore.deleteFilePermanently(ids)
-                withContext(Dispatchers.Main) {
-                    showBanner(appContext.getString(R.string.banner_removed_streaming_books, filesToDelete.size))
-                }
             }
         }
     }
@@ -2090,12 +2046,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         // cleanup touches Room + files. Both wait for first paint.
         launchPostLibraryReady { sweepOrphanedCache() }
         cleanupPendingExternalFileRemovals()
-        // Last-book auto-restore does a full book parse (EPUB) and navigates
-        // to the reader. Still honored, but after the library is ready so
-        // Home paints first. If the splash times out first, Home may be
-        // visible briefly before the reader opens.
-        launchPostLibraryReady(delayMillis = 500) { restoreReaderSessionIfNeeded() }
-
         // Play billing bind stays off the critical path; Pro status refresh
         // arrives ~2s later than before.
         viewModelScope.launch(Dispatchers.IO) {
@@ -2221,20 +2171,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun persistReaderSession(bookId: String, type: FileType) {
-        prefs.edit {
-            putString(KEY_LAST_OPEN_BOOK_ID, bookId)
-            putString(KEY_LAST_OPEN_FILE_TYPE, type.name)
-        }
-    }
-
-    private fun clearPersistedReaderSession() {
-        prefs.edit {
-            remove(KEY_LAST_OPEN_BOOK_ID)
-            remove(KEY_LAST_OPEN_FILE_TYPE)
-        }
-    }
-
     private fun pendingExternalFileRemovals(): List<PendingExternalFileRemoval> {
         return prefs.getStringSet(KEY_PENDING_EXTERNAL_FILE_REMOVALS, emptySet())
             .orEmpty()
@@ -2274,10 +2210,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         val removals = pendingExternalFileRemovals()
         if (removals.isEmpty()) return
 
-        val pendingBookIds = removals.mapTo(mutableSetOf()) { it.bookId }
-        if (prefs.getString(KEY_LAST_OPEN_BOOK_ID, null) in pendingBookIds) {
-            clearPersistedReaderSession()
-        }
 
         viewModelScope.launch {
             removals.forEach { removal ->
@@ -2320,140 +2252,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         if (!shouldRetry) {
             clearPendingExternalFileRemovals(setOf(removal.bookId))
         }
-    }
-
-    private fun restoreReaderSessionIfNeeded() {
-        val currentState = _internalState.value
-        val readerSession = readerSessionState(currentState)
-        if (!readerSession.canRestorePersistedReader || currentState.selectedPdfUri != null || currentState.selectedEpubUri != null) {
-            return
-        }
-
-        val persistedTypeName = prefs.getString(KEY_LAST_OPEN_FILE_TYPE, null)
-        val restoreBookId = prefs.getString(KEY_LAST_OPEN_BOOK_ID, null) ?: return
-
-        viewModelScope.launch {
-            val item = bookStore.getFileByBookId(restoreBookId)
-            val restoreUri = item?.getUri()
-            val restoreAction = androidReaderSessionRestoreAction(
-                restoreBookId,
-                persistedTypeName,
-                pendingExternalFileRemovals().mapTo(mutableSetOf()) { it.bookId },
-                item,
-                restoreUri,
-            )
-            when (restoreAction) {
-                MobileReaderSessionRestoreAction.NONE -> return@launch
-                MobileReaderSessionRestoreAction.CLEAR_PERSISTED_SESSION -> {
-                    Timber.tag("ReaderRestore")
-                        .w("Skipping stale or unavailable restore for bookId=$restoreBookId.")
-                    clearPersistedReaderSession()
-                    return@launch
-                }
-                MobileReaderSessionRestoreAction.RESTORE -> Unit
-            }
-            checkNotNull(item)
-            checkNotNull(restoreUri)
-
-            when {
-                item.type in PDF_VIEWER_FILE_TYPES -> {
-                    _internalState.update { state ->
-                        if (state.selectedBookId != null || state.selectedPdfUri != null || state.selectedEpubUri != null) {
-                            state
-                        } else {
-                            markReaderSessionReady(
-                                startReaderSession(state, item.bookId, item.type),
-                                item.bookId,
-                            ).copy(
-                                selectedPdfUri = restoreUri,
-                                selectedEpubBook = null,
-                                selectedEpubUri = null,
-                                initialLocator = null,
-                                initialCfi = null,
-                                initialBookmarksJson = item.bookmarksJson,
-                                initialHighlightsJson = null,
-                                initialPageInBook = item.lastPage,
-                                initialPageInBookIsExplicit = false,
-                                isOpeningFromTtsNotification = false
-                            )
-                        }
-                    }
-                    persistReaderSession(item.bookId, item.type)
-                    Timber.tag("ReaderRestore").i("Restored reader session for ${item.bookId} (${item.type}).")
-                }
-                item.type in EPUB_READER_FILE_TYPES -> {
-                    val locator =
-                        if (item.lastChapterIndex != null && item.locatorBlockIndex != null && item.locatorCharOffset != null) {
-                            Locator(
-                                chapterIndex = item.lastChapterIndex,
-                                blockIndex = item.locatorBlockIndex,
-                                charOffset = item.locatorCharOffset
-                            )
-                        } else {
-                            null
-                        }
-
-                    _internalState.update { state ->
-                        if (state.selectedBookId != null || state.selectedPdfUri != null || state.selectedEpubUri != null) {
-                            state
-                        } else {
-                            startReaderSession(state, item.bookId, item.type).copy(
-                                selectedPdfUri = null,
-                                selectedEpubBook = null,
-                                selectedEpubUri = restoreUri,
-                                initialLocator = locator,
-                                initialCfi = item.lastPositionCfi,
-                                initialBookmarksJson = item.bookmarksJson,
-                                initialHighlightsJson = item.highlightsJson,
-                                initialPageInBook = null,
-                                initialPageInBookIsExplicit = false,
-                                isOpeningFromTtsNotification = false
-                            )
-                        }
-                    }
-
-                    runCatching {
-                        restoreEpubReaderBook(item, restoreUri)
-                    }.onSuccess { restoredBook ->
-                        _internalState.update { state ->
-                            if (state.selectedBookId != item.bookId) {
-                                state
-                            } else {
-                                markReaderSessionReady(state, item.bookId)
-                                    .copy(selectedEpubBook = restoredBook)
-                            }
-                        }
-                        persistReaderSession(item.bookId, item.type)
-                        Timber.tag("ReaderRestore").i("Restored reader session for ${item.bookId} (${item.type}).")
-                    }.onFailure { error ->
-                        Timber.tag("ReaderRestore").e(error, "Failed to restore EPUB-like session for ${item.bookId}")
-                        clearPersistedReaderSession()
-                        _internalState.update { state ->
-                            if (state.selectedBookId != item.bookId) {
-                                state
-                            } else {
-                                markReaderSessionFailed(
-                                    state,
-                                    item.bookId,
-                                    appContext.getString(R.string.error_load_file, error.message),
-                                    closeReader = true,
-                                ).copy(
-                                    selectedEpubUri = null,
-                                    selectedEpubBook = null,
-                                )
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    clearPersistedReaderSession()
-                }
-            }
-        }
-    }
-
-    private suspend fun restoreEpubReaderBook(item: RecentFileItem, uri: Uri): EpubBook {
-        return restoreEpubReaderBook(item.type, item.bookId, item.displayName, uri)
     }
 
     private suspend fun restoreEpubReaderBook(
@@ -2504,7 +2302,8 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                     inputStream = inputStream,
                     type = type,
                     originalBookNameHint = displayName,
-                    bookId = bookId
+                    bookId = bookId,
+                    retainTxtPlainText = false
                 )
 
                 else -> throw IllegalArgumentException("Unsupported reader restore type: $type")
@@ -4122,9 +3921,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 librarySearchDeepLink = null
             )
         }
-        if (!isTemporaryExternalSession) {
-            clearPersistedReaderSession()
-        }
 
         var removesExternalFileOnClose = false
         if (closingBookId != null && (closingBookId == externalOpenedBookId || isTemporaryExternalSession)) {
@@ -4972,6 +4768,33 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         // inventory and keeps the same three-way conflict rules.
         enqueueCloudFolderManualRefresh(reason = "folder_scan")
         triggerFolderSyncWorker(metadataOnly = false, showFeedback = true)
+    }
+
+    fun updateLocalFolderReadingData(folder: SyncedFolder) {
+        triggerFolderSyncWorker(metadataOnly = true, showFeedback = true, targetFolderUriString = folder.uriString)
+    }
+
+    fun reconnectSyncedFolder(expectedUri: String, selectedUri: Uri) {
+        if (selectedUri.toString() != expectedUri) {
+            showBanner(appContext.getString(R.string.wenku_choose_same_folder), isError = true)
+            return
+        }
+        viewModelScope.launch {
+            val resolver = appContext.contentResolver
+            val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            val granted = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.takePersistableUriPermission(selectedUri, read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }.recoverCatching {
+                    resolver.takePersistableUriPermission(selectedUri, read)
+                }.isSuccess
+            }
+            if (granted) {
+                triggerFolderSyncWorker(metadataOnly = false, showFeedback = true, targetFolderUriString = expectedUri)
+            } else {
+                showBanner(appContext.getString(R.string.wenku_folder_permission_failed), isError = true)
+            }
+        }
     }
 
     /**
@@ -6866,10 +6689,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         val addStart = System.currentTimeMillis()
         Timber.tag("FileOpenPerf")
             .d("[$bookId] addFileToRecent START | type=$type | hasEpubBook=${epubBook != null}")
-        val isNewBook = withContext(Dispatchers.IO) {
-            bookStore.getFileByBookId(bookId) == null
-        }
-
         val fileSize = withContext(Dispatchers.IO) {
             try {
                 if (uri.scheme == "file") {
@@ -6901,6 +6720,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val existingItem = bookStore.getFileByBookId(bookId)
+        val isNewBook = existingItem == null
         val displayName = customDisplayName ?: existingItem?.displayName ?: getFileNameFromUri(
             uri, appContext
         ) ?: "Unknown File"
@@ -7085,7 +6905,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
-        if (coverPath == null) {
+        if (coverPath == null && type != FileType.TXT) {
             val thumbnailItem = RecentFileItem(
                 bookId = bookId,
                 uriString = uri.toString(),
@@ -7349,7 +7169,8 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                             appContext.contentResolver.openInputStream(externalUri)
                         }
                         if (hash != null && bookStore.getFileByBookId(hash) != null) {
-                            outcomeCounts = outcomeCounts.record(MobileImportOutcome.DUPLICATE)
+                            val restored = changeRemovedLibraryBooks(setOf(hash), remove = false)
+                            outcomeCounts = outcomeCounts.record(if (restored) MobileImportOutcome.ADDED else MobileImportOutcome.DUPLICATE)
                         } else if (getFileTypeFromUri(externalUri, appContext) == null) {
                             outcomeCounts = outcomeCounts.record(MobileImportOutcome.UNSUPPORTED)
                         } else {
@@ -7373,7 +7194,15 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 it.copy(
                     bannerMessage = BannerMessage(
-                        message = feedback.message,
+                        message = if (outcomeCounts.addedCount > 0 && outcomeCounts.addedCount < uris.size) {
+                            appContext.getString(
+                                R.string.wenku_import_summary,
+                                outcomeCounts.addedCount,
+                                outcomeCounts.duplicateCount,
+                                outcomeCounts.unsupportedCount,
+                                outcomeCounts.failedCount,
+                            )
+                        } else feedback.message,
                         isError = feedback.isError,
                         isPersistent = false
                     )
@@ -7532,6 +7361,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                         val existingItem = bookStore.getFileByBookId(hash)
                         if (existingItem != null) {
                             Timber.i("Re-selected an existing book. Opening it.")
+                            restoreLibraryBook(existingItem.bookId)
                             if (isTemporaryExternalIntent) {
                                 trackExternalOpenForClose(
                                     bookId = existingItem.bookId,
@@ -7675,7 +7505,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
             val bookId = effectiveItem.bookId
 
             if (type in PDF_VIEWER_FILE_TYPES) {
-                persistReaderSession(bookId, type)
                 _internalState.update { state ->
                     markReaderSessionReady(
                         startReaderSession(state, bookId, type),
@@ -7707,7 +7536,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                 stateUpdateDeferred.complete(true)
 
             } else if (type in EPUB_READER_FILE_TYPES) {
-                persistReaderSession(bookId, type)
                 try {
                     val epubBook = restoreEpubReaderBook(type, bookId, effectiveItem.displayName, uri)
                     _internalState.update { state ->
@@ -7944,33 +7772,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        if (uri.scheme != "opds-pse") {
-            try {
-                if (uri.scheme == "file") {
-                    uri.path?.let {
-                        val file = File(it)
-                        val size = file.length()
-                        val name = file.name
-                        Timber.tag("FileOpenPerf").d("[$bookId] File details | name=$name | size=${size} bytes | sizeMB=${size / (1024.0 * 1024)}")
-                    }
-                } else {
-                    val cursor = appContext.contentResolver.query(uri, null, null, null, null)
-                    cursor?.use {
-                        if (it.moveToFirst()) {
-                            val sizeIndex = it.getColumnIndex(OpenableColumns.SIZE)
-                            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            val size = if (sizeIndex != -1) it.getLong(sizeIndex) else -1L
-                            val name = if (nameIndex != -1) it.getString(nameIndex) else "unknown"
-                            Timber.tag("FileOpenPerf")
-                                .d("[$bookId] File details | name=$name | size=${size} bytes | sizeMB=${size / (1024.0 * 1024)}")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.tag("FileOpenPerf").e(e, "[$bookId] Failed to get file details")
-            }
-        }
-
         viewModelScope.launch {
             _internalState.update { state ->
                 startReaderSession(state, bookId, type).copy(
@@ -8009,7 +7810,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                     ReaderPerfLog.d("FileOpen ready bookId=$bookId type=$type elapsed=${System.currentTimeMillis() - openBookStartTime}ms")
                     if (persistToLibrary) {
-                        persistReaderSession(bookId, type)
                         addFileToRecent(
                             uri,
                             type,
@@ -8060,9 +7860,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                     ReaderPerfLog.d("FileOpen ready bookId=$bookId type=$type elapsed=${System.currentTimeMillis() - openBookStartTime}ms")
-                    if (persistToLibrary) {
-                        persistReaderSession(bookId, type)
-                    }
 
                     if (!suppressNavigation) {
                         Timber.tag("FileSwitch").d("EPUB state updated, emitting navigation event")
@@ -8243,7 +8040,8 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                             originalBookNameHint = customDisplayName ?: getFileNameFromUri(
                                 uri, appContext
                             ) ?: "unknown_doc",
-                            bookId = bookId
+                            bookId = bookId,
+                            retainTxtPlainText = false
                         )
                     }
                 }
@@ -8431,7 +8229,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun saveEpubReadingPosition(
-        uri: Uri, locator: Locator, cfiForWebView: String?, progress: Float
+        uri: Uri, locator: Locator, cfiForWebView: String?, progress: Float, chapterLabel: String? = null
     ) {
         Timber.d("Saving EPUB position locally: URI=$uri, Locator=$locator")
         enqueueReaderStateSave(uri.toString()) {
@@ -8458,6 +8256,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
                     progress = progress
                 )
                 val updated = bookStore.getFileByBookId(book.bookId)
+                updated?.saveChapterLabel(appContext, chapterLabel)
                 logCloudSyncTrace {
                     "android.reader.position_save_done beforeTs=${book.lastModifiedTimestamp} " +
                         (updated?.cloudSyncTraceSummary("after") ?: "after=null")
@@ -9092,9 +8891,9 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun selectAllLibraryFiles() {
+    fun selectAllLibraryFiles(visibleBooks: List<RecentFileItem>? = null) {
         val projectedState = uiState.value
-        val currentVisible = projectedState.allRecentFiles
+        val currentVisible = visibleBooks ?: projectedState.allRecentFiles
         _internalState.update { state ->
             replaceBookSelectionWithVisibleBooks(
                 current = state,
@@ -9108,19 +8907,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         Timber.d("Clearing contextual action mode.")
         if (_internalState.value.contextualActionItems.isNotEmpty()) {
             _internalState.update { it.withSharedLibraryAction(SharedLibraryAction.SelectionCleared) }
-        }
-    }
-
-    fun showCreateShelfDialog() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.CreateDialogShown()))
-        }
-    }
-
-    fun showCreateShelfDialogForSelectedBooks(bookIds: Set<String>) {
-        val sanitizedBookIds = SharedLibraryEditor.cleanBookIds(bookIds)
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.CreateDialogShown(sanitizedBookIds)))
         }
     }
 
@@ -9141,28 +8927,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         _internalState.update { it.copy(externalFileBehavior = behavior) }
     }
 
-    fun dismissCreateShelfDialog() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.CreateDialogDismissed))
-        }
-    }
-
-    fun createShelf(name: String) {
-        val selectedBookIds = SharedLibraryEditor.cleanBookIds(_internalState.value.createShelfSelectedBookIds)
-        viewModelScope.launch {
-            val shelfId = libraryMutationController.createShelf(name, selectedBookIds) ?: return@launch
-            if (selectedBookIds.isNotEmpty()) {
-                _internalState.update { it.withClearedLibraryBookSelection() }
-            }
-            dismissCreateShelfDialog()
-        }
-    }
-
-    /**
-     * Library Beta is the only main destination, so the persisted page index no longer
-     * selects anything. It is still written so older installs migrating through this
-     * release land on Library Beta rather than on a retired Home or Library screen.
-     */
     fun setMainScreenPage(page: Int) {
         val sanitizedPage = page.coerceIn(0, 2)
         if (_internalState.value.mainScreenStartPage == sanitizedPage) return
@@ -9189,7 +8953,7 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setUnifiedLibrarySection(section: Int) {
-        val sanitizedSection = section.coerceIn(0, 4)
+        val sanitizedSection = androidLibrarySection(section).persistedValue
         if (_internalState.value.unifiedLibrarySection == sanitizedSection) return
         _internalState.update { it.copy(unifiedLibrarySection = sanitizedSection) }
         persistLibraryLandingState()
@@ -9321,236 +9085,13 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
      * Opens a shelf. Library Beta owns its own shelf navigation state, so this no longer
      * forces the retired Library page index.
      */
-    fun navigateToShelf(id: String) {
-        _internalState.update {
-            it.copy(
-                shelfState = it.shelfState.reduce(AppShelfAction.ShelfOpened(id)),
-            )
-        }
-        persistLibraryLandingState()
-    }
-
-    fun showRenameShelfDialog(shelfId: String) {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.RenameDialogChanged(shelfId)))
-        }
-    }
-
-    fun dismissRenameShelfDialog() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.RenameDialogChanged(null)))
-        }
-    }
-
-    fun showDeleteShelfDialog(shelfId: String) {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.DeleteDialogChanged(shelfId)))
-        }
-    }
-
-    fun dismissDeleteShelfDialog() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.DeleteDialogChanged(null)))
-        }
-    }
-
-    fun renameShelf(shelfId: String, newName: String) {
-        val cleanName = SharedLibraryEditor.cleanShelfName(newName)
-        if (!SharedLibraryEditor.canMutateShelf(shelfId) || cleanName == null) {
-            dismissRenameShelfDialog()
-            return
-        }
-        viewModelScope.launch {
-            libraryMutationController.renameShelf(shelfId, cleanName)
-            _internalState.update {
-                it.copy(shelfState = it.shelfState.reduce(AppShelfAction.ShelfRenameCompleted(shelfId)))
-            }
-            persistLibraryLandingState()
-            dismissRenameShelfDialog()
-        }
-    }
-
-    fun deleteShelf(shelfId: String) {
-        if (!SharedLibraryEditor.canMutateShelf(shelfId)) {
-            dismissDeleteShelfDialog()
-            return
-        }
-        viewModelScope.launch {
-            _internalState.update {
-                it.copy(shelfState = it.shelfState.reduce(AppShelfAction.ShelfDeleted))
-            }
-            persistLibraryLandingState()
-            libraryMutationController.deleteShelf(shelfId)
-        }
-    }
-
-    fun unselectShelf() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.ShelfClosed))
-        }
-        persistLibraryLandingState()
-    }
-
-    fun navigateBackFromShelf() {
-        val currentShelf = uiState.value.shelves.find { it.id == _internalState.value.viewingShelfId }
-        val parentShelfId = currentShelf?.takeIf { it.type == ShelfType.FOLDER }?.parentShelfId
-        if (parentShelfId != null) {
-            _internalState.update {
-                it.copy(shelfState = it.shelfState.reduce(AppShelfAction.ParentShelfOpened(parentShelfId)))
-            }
-            persistLibraryLandingState()
-        } else {
-            unselectShelf()
-        }
-    }
-
-    fun removeContextualItemsFromShelf() {
-        val shelfId = _internalState.value.viewingShelfId
-        if (!SharedLibraryEditor.canMutateShelf(shelfId)) {
-            clearContextualAction()
-            return
-        }
-        val targetShelfId = shelfId ?: return
-
-        val bookIdsToRemove = SharedLibraryEditor.cleanBookIds(_internalState.value.contextualActionItems.map { it.bookId })
-        if (bookIdsToRemove.isEmpty()) {
-            clearContextualAction()
-            return
-        }
-
-        viewModelScope.launch {
-            libraryMutationController.removeBooksFromShelf(targetShelfId, bookIdsToRemove)
-            clearContextualAction()
-        }
-    }
-
-    fun onShelfClick(shelf: Shelf) {
-        if (_internalState.value.contextualActionShelfIds.isNotEmpty()) {
-            toggleShelfSelection(shelf)
-        } else {
-            navigateToShelf(shelf.id)
-        }
-    }
-
-    private fun toggleShelfSelection(shelf: Shelf) {
-        if (shelf.type != ShelfType.MANUAL) return
-
-        _internalState.update { it.withSharedLibraryAction(SharedLibraryAction.ShelfSelectionToggled(shelf.id)) }
-    }
-
-    fun onShelfLongPress(shelf: Shelf) {
-        if (shelf.type != ShelfType.MANUAL || shelf.id == "unshelved") return
-        val currentSelection = _internalState.value.contextualActionShelfIds
-        if (shelf.id !in currentSelection) {
-            _internalState.update { it.withSharedLibraryAction(SharedLibraryAction.ShelfSelectionToggled(shelf.id)) }
-        }
-    }
-
-    fun clearShelfContextualAction() {
-        if (_internalState.value.contextualActionShelfIds.isNotEmpty()) {
-            _internalState.update { it.withSharedLibraryAction(SharedLibraryAction.ShelfSelectionCleared) }
-        }
-    }
-
-    fun deleteSelectedShelves() {
-        val shelvesToDelete = _internalState.value.contextualActionShelfIds
-            .filterTo(mutableSetOf()) { SharedLibraryEditor.canMutateShelf(it) }
-        if (shelvesToDelete.isEmpty()) {
-            clearShelfContextualAction()
-            return
-        }
-
-        viewModelScope.launch {
-            libraryMutationController.deleteShelves(shelvesToDelete)
-            clearShelfContextualAction()
-        }
-    }
-
-    fun showAddBooksToShelf() {
-        _internalState.update {
-            it.copy(
-                shelfState = it.shelfState.reduce(
-                    AppShelfAction.AddBooksStarted(AddBooksSource.UNSHELVED),
-                ),
-            )
-        }
-        persistLibraryLandingState()
-    }
-
-    private fun syncShelfChangeToFirestore(shelfId: String) {
-        if (!uiState.value.isSyncEnabled) return
-        val currentUser = uiState.value.currentUser ?: return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val db = com.aryan.reader.data.AppDatabase.getDatabase(appContext)
-            val shelf = db.shelfDao().getShelfById(shelfId) ?: return@launch
-            if (shelf.isSmart) return@launch
-            val crossRefs = db.shelfDao().getCrossRefsForShelf(shelfId)
-            val manualOnlyBookIds = bookStore.getAllFilesForSync()
-                .filter { it.isManualOnlyReaderFile() }
-                .mapTo(mutableSetOf()) { it.bookId }
-            val bookIds = crossRefs.map { it.bookId }
-                .filterNot { it in manualOnlyBookIds }
-
-            val shelfMetadata = ShelfMetadata(
-                shelfId = shelf.id,
-                name = shelf.name,
-                bookIds = bookIds,
-                isDeleted = shelf.isDeleted,
-                lastModifiedTimestamp = shelf.updatedAt
-            )
-
-            val deviceId = getInstallationId()
-            firestoreRepository.syncShelf(currentUser.uid, shelfMetadata, deviceId)
-        }
-    }
-
-    fun dismissAddBooksToShelf() {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.AddBooksDismissed))
-        }
-        persistLibraryLandingState()
-    }
-
-    fun addBooksToShelf(shelfId: String) {
-        val bookIdsToAdd = SharedLibraryEditor.cleanBookIds(_internalState.value.booksSelectedForAdding)
-        if (!SharedLibraryEditor.canMutateShelf(shelfId) || bookIdsToAdd.isEmpty()) {
-            dismissAddBooksToShelf()
-            return
-        }
-        viewModelScope.launch {
-            libraryMutationController.addBooksToShelves(bookIdsToAdd, setOf(shelfId))
-            _internalState.update {
-                it.copy(shelfState = it.shelfState.reduce(AppShelfAction.AddBooksCompleted))
-            }
-            persistLibraryLandingState()
-        }
-    }
-
-    fun setAddBooksSource(source: AddBooksSource) {
-        _internalState.update {
-            it.copy(shelfState = it.shelfState.reduce(AppShelfAction.AddBooksSourceChanged(source)))
-        }
-        prefs.edit { putString(KEY_ADD_BOOKS_SOURCE, source.name) }
-    }
-
     private fun persistLibraryLandingState() {
         val state = _internalState.value
-        val resolvedUiState = uiState.value
         prefs.edit {
             putInt(KEY_MAIN_SCREEN_START_PAGE, state.mainScreenStartPage)
             putInt(KEY_LIBRARY_SCREEN_START_PAGE, state.libraryScreenStartPage)
-            putInt(KEY_UNIFIED_LIBRARY_SECTION, state.unifiedLibrarySection)
             putBoolean(KEY_UNIFIED_LIBRARY_LIST_VIEW, state.unifiedLibraryListView)
             putBoolean(KEY_SEARCH_INSIDE_FILES, state.libraryState.searchInsideFiles)
-            putString(KEY_LAST_VIEWING_SHELF_ID, resolvedUiState.viewingShelfId)
-            putBoolean(KEY_LAST_ADDING_BOOKS_TO_SHELF, resolvedUiState.isAddingBooksToShelf)
-        }
-    }
-
-    fun toggleBookSelectionForAdding(bookId: String) {
-        _internalState.update { state ->
-            state.copy(shelfState = state.shelfState.reduce(AppShelfAction.BookForAddingToggled(bookId)))
         }
     }
 
@@ -10405,7 +9946,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         internal const val KEY_SHELF_CONTENT_PREFIX = "shelf_content_"
         internal const val KEY_SHELF_TIMESTAMP_PREFIX = "shelf_timestamp_"
         internal const val KEY_SHELF_DELETED_PREFIX = "shelf_deleted_"
-        private const val KEY_ADD_BOOKS_SOURCE = "add_books_source"
         private const val KEY_LAST_SYNC_TIMESTAMP = "last_sync_timestamp"
         private const val KEY_INSTALLATION_ID = "installation_id"
         private const val KEY_APP_OPEN_COUNT = "app_open_count"
@@ -10418,8 +9958,6 @@ open class MainViewModel(application: Application) : AndroidViewModel(applicatio
         private const val KEY_TABS_ENABLED = "tabs_enabled"
         private const val KEY_OPEN_TAB_IDS = "open_tab_ids"
         private const val KEY_ACTIVE_TAB = "active_tab_book_id"
-        private const val KEY_LAST_OPEN_BOOK_ID = "last_open_book_id"
-        private const val KEY_LAST_OPEN_FILE_TYPE = "last_open_file_type"
         private const val KEY_EXTERNAL_FILE_BEHAVIOR = "external_file_behavior"
         private const val EXTERNAL_FILE_BEHAVIOR_ASK = "ASK"
         private const val EXTERNAL_FILE_BEHAVIOR_TEMPORARY = "TEMPORARY"

@@ -47,7 +47,6 @@ internal class ContentThumbnailGenerator(context: Context) {
             FileType.FB2,
             FileType.HTML,
             FileType.MD,
-            FileType.TXT,
             FileType.DOCX,
             FileType.DOC -> generateTextPreview(uri, item.type)
             else -> null
@@ -152,7 +151,7 @@ internal class ContentThumbnailGenerator(context: Context) {
             when (type) {
                 FileType.FB2 -> extractXmlText(input, textTags = FB2_TEXT_TAGS, rootTag = "body")
                 FileType.HTML -> extractHtmlText(input)
-                FileType.MD, FileType.TXT -> readPlainText(input)
+                FileType.MD -> readPlainText(input)
                 FileType.DOCX -> extractDocxText(input)
                 FileType.DOC -> extractDocTextPreview(input)
                 FileType.ODT -> extractOdtText(input, isFlat = false)

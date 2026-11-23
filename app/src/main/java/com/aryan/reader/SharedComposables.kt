@@ -122,7 +122,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.toArgb
@@ -319,13 +318,14 @@ fun ContextualTopAppBar(
     onShareClick: (() -> Unit)? = null,
     onExportAnnotationsClick: (() -> Unit)? = null,
     onTagClick: (() -> Unit)? = null,
-    onAddToShelfClick: (() -> Unit)? = null,
     onSelectAllClick: (() -> Unit)? = null,
     onPinClick: (() -> Unit)? = null,
     onDeleteClick: () -> Unit,
     compactSelectionActions: Boolean = false,
     overflowDeleteLabelRes: Int = R.string.action_delete,
     onClearSelectionClick: (() -> Unit)? = null,
+    onDeleteOriginalClick: (() -> Unit)? = null,
+    onCategoryClick: (() -> Unit)? = null,
 ) {
     SharedMobileContextualActionBar(
         selectedItemCount = selectedItemCount,
@@ -343,6 +343,8 @@ fun ContextualTopAppBar(
             share = stringResource(R.string.action_share),
             exportAnnotations = stringResource(R.string.action_export_annotations),
             clear = stringResource(R.string.action_clear),
+            deleteOriginal = stringResource(R.string.wenku_delete_device_files),
+            category = stringResource(R.string.wenku_change_category),
         ),
         onNavigateBack = onNavIconClick,
         onDelete = onDeleteClick,
@@ -352,10 +354,11 @@ fun ContextualTopAppBar(
         onShare = onShareClick,
         onExportAnnotations = onExportAnnotationsClick,
         onTag = onTagClick,
-        onAddToShelf = onAddToShelfClick,
         onSelectAll = onSelectAllClick,
         onPin = onPinClick,
         onClear = onClearSelectionClick,
+        onDeleteOriginal = onDeleteOriginalClick,
+        onCategory = onCategoryClick,
         tagIcon = { contentDescription ->
             Icon(
                 painterResource(R.drawable.tag),
@@ -385,7 +388,8 @@ fun DeleteConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     isPermanentDelete: Boolean = false,
-    containsFolderItems: Boolean = false
+    containsFolderItems: Boolean = false,
+    affectedNames: String? = null,
 ) {
     val title = if (isPermanentDelete) pluralStringResource(R.plurals.dialog_delete_permanently, count) else stringResource(R.string.dialog_remove_from_recents)
 
@@ -406,7 +410,7 @@ fun DeleteConfirmationDialog(
         title = { Text(title) },
         text = {
             Text(
-                text,
+                affectedNames?.takeIf(String::isNotBlank)?.let { "$it\n\n$text" } ?: text,
                 color = if (containsFolderItems && isPermanentDelete) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
@@ -480,6 +484,7 @@ fun FileInfoDialog(
         displayTitle = item.cardTitle(usePdfFileNameAsDisplayName),
         initialDisplayName = item.customName ?: item.cardTitle(usePdfFileNameAsDisplayName),
         originalFileName = item.displayName,
+        readingLabel = item.readingProgressLabel(context) ?: stringResource(R.string.wenku_not_started),
         displayNameChanged = !item.customName.isNullOrBlank(),
         editLibraryTags = false,
         onOpenTags = onOpenTags,
@@ -558,9 +563,7 @@ private fun MetadataCoverPreview(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
-                .size(width = 72.dp, height = 104.dp)
-                .clip(RoundedCornerShape(8.dp))
+            modifier = Modifier.size(width = 72.dp, height = 104.dp)
         ) {
             ThemedBookCover(
                 item = item,
@@ -683,11 +686,11 @@ fun AboutDialog(onDismiss: () -> Unit) {
     com.aryan.reader.shared.ui.SharedAndroidAboutDialog(
         strings = com.aryan.reader.shared.ui.SharedAndroidAboutStrings(
             appName = stringResource(R.string.about_app_name),
-            flavorLabel = if (isOss) stringResource(R.string.about_oss_version) else stringResource(R.string.about_play_version),
+            flavorLabel = "",
             versionLabel = stringResource(R.string.about_version_name, BuildConfig.VERSION_NAME),
-            buildLabel = stringResource(R.string.about_build_code, BuildConfig.VERSION_CODE.toString()),
-            githubTitle = stringResource(R.string.about_github),
-            githubDescription = stringResource(R.string.about_github_desc),
+            buildLabel = "",
+            githubTitle = stringResource(R.string.wenku_upstream_project),
+            githubDescription = "Episteme OSS",
             privacyTitle = stringResource(R.string.legal_privacy_policy),
             privacyDescription = stringResource(R.string.about_privacy_desc),
             termsTitle = stringResource(R.string.legal_terms_of_service),
@@ -719,7 +722,7 @@ fun EmptyState(
     message: String,
     onSelectFileClick: () -> Unit,
     modifier: Modifier = Modifier,
-    primaryButtonText: String = stringResource(R.string.empty_select_file),
+    primaryButtonText: String? = stringResource(R.string.empty_select_file),
     secondaryButtonText: String? = null,
     onSecondaryClick: (() -> Unit)? = null
 ) {
@@ -863,20 +866,22 @@ fun BookTagChipsRow(
     }
 }
 
-private const val UNKNOWN_AUTHOR_LABEL = "No author listed"
-
 fun RecentFileItem.cardTitle(usePdfFileNameAsDisplayName: Boolean = false): String {
     customName?.takeIf { it.isNotBlank() }?.let { return it }
     if (usePdfFileNameAsDisplayName && type == FileType.PDF) {
         return displayName
     }
-    return title?.takeIf { it.isNotBlank() } ?: displayName
+    val metadataTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+    if (type == FileType.PDF && metadataTitle?.lowercase() in setOf("目录", "目錄", "contents", "table of contents", "untitled")) {
+        return displayName.substringBeforeLast('.', displayName)
+    }
+    return metadataTitle ?: displayName
 }
 
 fun RecentFileItem.cardAuthor(): String {
     return author
         ?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) }
-        ?: UNKNOWN_AUTHOR_LABEL
+        .orEmpty()
 }
 
 fun RecentFileItem.progressPercentValue(): Int {

@@ -6,10 +6,10 @@ import org.junit.Test
 class UnifiedLibraryBackTest {
 
     @Test
-    fun `selection clears before search and shelf`() {
+    fun `selection clears before search and leaving a management page`() {
         assertEquals(
             LibraryBackAction.CLEAR_SELECTION,
-            nextLibraryBackAction(hasSelection = true, isSearchActive = true, inShelf = true),
+            nextLibraryBackAction(hasSelection = true, isSearchActive = true, isManagementPage = true),
         )
     }
 
@@ -20,25 +20,25 @@ class UnifiedLibraryBackTest {
             nextLibraryBackAction(
                 hasSelection = false,
                 isSearchActive = true,
-                inShelf = true,
+                isManagementPage = true,
                 isKeyboardOpen = true,
             ),
         )
     }
 
     @Test
-    fun `active search clears before shelf up`() {
+    fun `active search clears first`() {
         assertEquals(
             LibraryBackAction.CLEAR_SEARCH,
-            nextLibraryBackAction(hasSelection = false, isSearchActive = true, inShelf = true),
+            nextLibraryBackAction(hasSelection = false, isSearchActive = true, isManagementPage = true),
         )
     }
 
     @Test
-    fun `shelf up only when nothing else to unwind`() {
+    fun `back from a management page returns to the library`() {
         assertEquals(
-            LibraryBackAction.SHELF_UP,
-            nextLibraryBackAction(hasSelection = false, isSearchActive = false, inShelf = true),
+            LibraryBackAction.RETURN_TO_LIBRARY,
+            nextLibraryBackAction(hasSelection = false, isSearchActive = false, isManagementPage = true),
         )
     }
 
@@ -46,7 +46,19 @@ class UnifiedLibraryBackTest {
     fun `no layers means no interception`() {
         assertEquals(
             LibraryBackAction.NONE,
-            nextLibraryBackAction(hasSelection = false, isSearchActive = false, inShelf = false),
+            nextLibraryBackAction(hasSelection = false, isSearchActive = false, isManagementPage = false),
+        )
+    }
+
+    @Test
+    fun `upgrading from the removed shelf section opens the library`() {
+        assertEquals(
+            UnifiedLibrarySection.HOME,
+            androidLibrarySection(UnifiedLibrarySection.SHELVES.persistedValue),
+        )
+        assertEquals(
+            UnifiedLibrarySection.FOLDERS,
+            androidLibrarySection(UnifiedLibrarySection.FOLDERS.persistedValue),
         )
     }
 }

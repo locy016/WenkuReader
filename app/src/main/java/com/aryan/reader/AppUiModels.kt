@@ -110,7 +110,6 @@ data class ReaderScreenState(
     val appAppearance: AppAppearanceState = AppAppearanceState(),
     val allTags: List<TagEntity> = emptyList(),
     val showTagSelectionDialogFor: Set<String> = emptySet(),
-    val showAddSelectedToShelfDialogFor: Set<String> = emptySet(),
     val isScreenCaptureProtectionEnabled: Boolean = false,
 ) {
     val selectedBookId: String? get() = readerSession.bookId
@@ -120,10 +119,6 @@ data class ReaderScreenState(
     val activeTabBookId: String? get() = tabState.activeBookId
     val viewingShelfId: String? get() = shelfState.viewingShelfId
     val isAddingBooksToShelf: Boolean get() = shelfState.isAddingBooks
-    val showCreateShelfDialog: Boolean get() = shelfState.showCreateDialog
-    val createShelfSelectedBookIds: Set<String> get() = shelfState.createShelfBookIds
-    val showRenameShelfDialogFor: String? get() = shelfState.renameDialogShelfId
-    val showDeleteShelfDialogFor: String? get() = shelfState.deleteDialogShelfId
     val addBooksSource: AddBooksSource get() = shelfState.addBooksSource
     val booksSelectedForAdding: Set<String> get() = shelfState.selectedBookIdsForAdding
     val pinnedHomeBookIds: Set<String> get() = pinState.homeBookIds

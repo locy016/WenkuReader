@@ -241,7 +241,7 @@ internal fun savePageTurnAnimationSetting(context: Context, isEnabled: Boolean) 
 
 internal fun loadPageTurnAnimationSetting(context: Context): Boolean {
     val prefs = context.getSharedPreferences("reader_prefs", Context.MODE_PRIVATE)
-    return prefs.getBoolean(PAGE_TURN_ANIMATION_KEY, false)
+    return prefs.getBoolean(PAGE_TURN_ANIMATION_KEY, true)
 }
 
 internal fun saveAutoScrollMinSpeed(context: Context, speed: Float) {

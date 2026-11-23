@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Reader"
+rootProject.name = "WenkuReader"
 
 fun isDesktopOnlyBuild(): Boolean {
     providers.gradleProperty("desktopOnly").orNull

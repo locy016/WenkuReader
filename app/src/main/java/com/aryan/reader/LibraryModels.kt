@@ -14,6 +14,12 @@ typealias LibraryFilters = com.aryan.reader.shared.LibraryFilters
 typealias SyncedFolder = com.aryan.reader.shared.SyncedFolder
 typealias ShelfType = com.aryan.reader.shared.ShelfType
 
+internal fun androidLibrarySection(value: Int): UnifiedLibrarySection =
+    when (val section = UnifiedLibrarySection.fromPersisted(value)) {
+        UnifiedLibrarySection.FOLDERS, UnifiedLibrarySection.AUDIOBOOKS -> section
+        else -> UnifiedLibrarySection.HOME
+    }
+
 internal val ANDROID_READABLE_FILE_TYPES = SharedFileCapabilities.readableTypesFor(ReaderPlatform.ANDROID)
 internal val ANDROID_SYNCABLE_FILE_TYPES = SharedFileCapabilities.syncableTypesFor(ReaderPlatform.ANDROID)
 internal val COMIC_ARCHIVE_FILE_TYPES = SharedFileCapabilities.comicArchiveTypes

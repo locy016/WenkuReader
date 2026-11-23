@@ -1,5 +1,7 @@
 package com.aryan.reader.epubreader
 
+import com.aryan.reader.ui.theme.readerToolbarContainerColor
+
 import com.aryan.reader.shared.readerTtsChunkLabel
 import androidx.annotation.StringRes
 import androidx.compose.foundation.lazy.LazyListState
@@ -365,6 +367,8 @@ fun EpubReaderTopBar(
         ) {
             SharedMobileEpubTopBar(
                 title = bookTitle,
+                showBookmarkShortcut = true,
+                containerColor = readerToolbarContainerColor(),
                 isBookmarked = isBookmarked,
                 topTools = topTools,
                 topInset = topInset,
@@ -568,6 +572,14 @@ fun EpubReaderBottomBar(
         ) {
             SharedMobileEpubBottomBar(
                 tools = tools,
+                toolLabels = mapOf(
+                    ReaderTool.TOC to stringResource(R.string.wenku_reader_contents),
+                    ReaderTool.FORMAT to stringResource(R.string.wenku_reader_format),
+                    ReaderTool.SEARCH to stringResource(R.string.tooltip_search),
+                    ReaderTool.SLIDER to stringResource(R.string.wenku_reader_progress),
+                    ReaderTool.TTS_CONTROLS to stringResource(R.string.wenku_reader_listen),
+                ),
+                containerColor = readerToolbarContainerColor(),
                 isBookmarked = false,
                 onBookmark = {},
                 onVisualOptions = {},

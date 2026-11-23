@@ -1,5 +1,6 @@
 package com.aryan.reader.shared.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Close
@@ -25,7 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,7 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -71,12 +78,33 @@ fun SharedAndroidUnifiedTopBar(
     searchInsideFilesLabel: String = "Search inside files",
     density: SharedAndroidHomeDensity = SharedAndroidHomeDensity.Standard,
     modifier: Modifier = Modifier,
+    menuIcon: ImageVector = Icons.Default.Menu,
+    libraryHeading: String? = null,
+    showAccount: Boolean = true,
+    onOpenSearch: (() -> Unit)? = null,
+    onCloseSearch: (() -> Unit)? = null,
+    openSearchDescription: String = "",
+    closeSearchDescription: String = "",
+    requestSearchFocus: Boolean = false,
+    onSearchFocusHandled: () -> Unit = {},
+    headingActions: @Composable () -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val libraryStyle = LocalSharedLibrarySurfaceStyle.current
     val focusRequester = remember { FocusRequester() }
     var searchFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(requestSearchFocus, searchQuery != null) {
+        if (requestSearchFocus && searchQuery != null) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+            onSearchFocusHandled()
+        }
+    }
     val showContentScopeToggle = onSearchInsideFilesChange != null &&
-        searchQuery != null && !showingShelf && (searchFocused || searchQuery.isNotEmpty())
+        searchQuery != null && !showingShelf && (onCloseSearch != null || searchFocused || searchQuery.isNotEmpty())
+    val showLibraryHeading = libraryHeading != null && onCloseSearch == null &&
+        (onOpenSearch != null || (!searchFocused && searchQuery.isNullOrBlank()))
     // A foldable iPhone has no top status-bar inset while the status bar sits on the side
     // of the display, so without an explicit margin the bar's content touches the
     // display's rounded top-left corner. Apple's guidance is to keep the normal layout
@@ -84,8 +112,8 @@ fun SharedAndroidUnifiedTopBar(
     // identity on every other device, where the status-bar inset already provides it.
     val duoDisplay = LocalSharedDeviceLayout.current.isDuoDevice
     val hasLeadingControl = showingShelf || onMenu != null
-    val startPadding = if (duoDisplay && !hasLeadingControl) 20.dp else 8.dp
-    val endPadding = if (duoDisplay) 16.dp else 8.dp
+    val startPadding = if (libraryHeading != null || (duoDisplay && !hasLeadingControl)) 16.dp else 8.dp
+    val endPadding = if (libraryHeading != null || duoDisplay) 16.dp else 8.dp
     val topPadding = if (duoDisplay) density.topBarTopPadding else 0.dp
     Surface(shadowElevation = 1.dp, modifier = modifier.fillMaxWidth()) {
         Column(
@@ -95,31 +123,76 @@ fun SharedAndroidUnifiedTopBar(
                 .padding(start = startPadding, end = endPadding)
                 .padding(top = topPadding)
         ) {
-            Row(
+            if (showLibraryHeading && libraryHeading != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 4.dp, top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        libraryHeading,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    headingActions()
+                    if (onOpenSearch != null) {
+                        IconButton(onClick = onOpenSearch, modifier = Modifier.testTag("UnifiedLibraryOpenSearch")) {
+                            Icon(Icons.Default.Search, openSearchDescription)
+                        }
+                    }
+                    if (showAccount) {
+                        IconButton(onClick = onAccount, modifier = Modifier.testTag("UnifiedLibraryProfile")) { accountAvatar() }
+                    }
+                }
+            }
+            if (onOpenSearch == null || searchQuery != null) Row(
                 Modifier.fillMaxWidth().height(density.searchRowHeight),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-            if (showingShelf) {
+            if (onCloseSearch != null) {
+                IconButton(onClick = onCloseSearch, modifier = Modifier.testTag("UnifiedLibraryCloseSearch")) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, closeSearchDescription)
+                }
+            } else if (showingShelf) {
                 IconButton(onClick = onBackFromShelf) { Icon(Icons.AutoMirrored.Filled.ArrowBack, backToShelvesDescription) }
             } else if (onMenu != null) {
-                IconButton(onClick = onMenu) { Icon(Icons.Default.Menu, drawerDescription) }
+                IconButton(onClick = onMenu) { Icon(menuIcon, drawerDescription) }
             }
             if (searchQuery != null && !showingShelf) {
+                val searchOutline = libraryStyle?.let {
+                    Modifier.border(if (searchFocused) it.activeOutline else it.outline, it.shape)
+                } ?: Modifier
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                        .then(searchOutline)
                         .focusRequester(focusRequester)
                         .onFocusChanged { searchFocused = it.isFocused }
                         .testTag("UnifiedLibrarySearch"),
-                    shape = CircleShape,
+                    shape = libraryStyle?.shape ?: if (libraryHeading != null) RoundedCornerShape(14.dp) else CircleShape,
+                    colors = when {
+                        libraryStyle != null -> OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = if (onCloseSearch != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedContainerColor = if (onCloseSearch != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                        )
+                        libraryHeading != null -> OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        else -> OutlinedTextFieldDefaults.colors()
+                    },
                     placeholder = { Text(searchPlaceholder, maxLines = 1) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
-                        if (searchQuery.isNotEmpty() || searchFocused) {
+                        if (searchQuery.isNotEmpty() || (onCloseSearch == null && searchFocused)) {
                             IconButton(onClick = {
                                 if (searchQuery.isNotEmpty()) onSearchQueryChange("")
-                                focusManager.clearFocus()
+                                if (onCloseSearch == null) focusManager.clearFocus()
                             }) {
                                 Icon(Icons.Default.Close, clearSearchDescription)
                             }
@@ -141,7 +214,9 @@ fun SharedAndroidUnifiedTopBar(
             } else {
                 Spacer(Modifier.weight(1f))
             }
-            IconButton(onClick = onAccount, modifier = Modifier.testTag("UnifiedLibraryProfile")) { accountAvatar() }
+            if (showAccount && !showLibraryHeading) {
+                IconButton(onClick = onAccount, modifier = Modifier.testTag("UnifiedLibraryProfile")) { accountAvatar() }
+            }
         }
             if (showContentScopeToggle) {
                 val onToggle: (Boolean) -> Unit = onSearchInsideFilesChange
@@ -153,7 +228,9 @@ fun SharedAndroidUnifiedTopBar(
                         selected = searchInsideFiles,
                         onClick = { onToggle(!searchInsideFiles) },
                         modifier = Modifier.testTag("UnifiedLibrarySearchInsideFiles"),
-                        shape = CircleShape,
+                        shape = libraryStyle?.shape ?: CircleShape,
+                        border = libraryStyle?.let { if (searchInsideFiles) it.activeOutline else it.outline }
+                            ?: FilterChipDefaults.filterChipBorder(enabled = true, selected = searchInsideFiles),
                         label = {
                             Text(
                                 searchInsideFilesLabel,

@@ -25,7 +25,7 @@ class EpubTestActivity : ComponentActivity() {
                 initialBookmarksJson = null,
                 isProUser = false,
                 onNavigateBack = {},
-                onSavePosition = { _, _, _ -> },
+                onSavePosition = { _, _, _, _ -> },
                 onBookmarksChanged = {},
                 onNavigateToPro = {},
                 coverImagePath = null,

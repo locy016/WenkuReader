@@ -43,7 +43,7 @@ fun PdfSearchResultsPanel(
     com.aryan.reader.shared.ui.SharedReaderLazySearchResultsPanel(
         itemCount = lazyResults.itemCount,
         isRefreshing = lazyResults.loadState.refresh is LoadState.Loading,
-        noResultsText = stringResource(R.string.search_no_results_simple),
+        noResultsText = stringResource(R.string.wenku_pdf_no_text_match),
         resultsCountText = stringResource(R.string.msg_results_found_pages, totalPageCount),
         itemAt = { index -> lazyResults[index] },
         onResultClick = onResultClick,
@@ -61,7 +61,7 @@ fun PdfSearchResultsList(
     com.aryan.reader.shared.ui.SharedReaderSearchResultsPanel(
         results = results,
         isSearching = false,
-        noResultsText = stringResource(R.string.search_no_results_simple),
+        noResultsText = stringResource(R.string.wenku_pdf_no_text_match),
         resultsCountText = { count ->
             context.resources.getQuantityString(R.plurals.search_matches_count, count, count)
         },

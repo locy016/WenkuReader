@@ -1514,7 +1514,7 @@
     <string name="tts_replacements_replace_only_spoken_desc">阅读器文本、突出显示和位置保持不变。</string>
     <string name="tts_replacements_summary_format">%1$s -&gt; %2$s</string>
     <string name="action_disable">关闭</string>
-    <string name="nav_unified_library">书库 Beta 版</string>
+    <string name="nav_unified_library">书库</string>
     <string name="unified_library_beta">BETA</string>
     <string name="unified_library_continue_reading">继续阅读</string>
     <string name="unified_library_your_books">你的书籍</string>
@@ -1600,7 +1600,7 @@
     <string name="audiobooks_imported_files_desc">导入音频文件</string>
     <string name="audiobooks_continue_listening">继续听书</string>
     <string name="audiobooks_in_progress">进行中</string>
-    <string name="audiobooks_not_started">没有已开始项</string>
+    <string name="audiobooks_not_started">未开始</string>
     <string name="audiobooks_completed">已完成</string>
     <string name="audiobooks_listen_to_ebooks">听你的电子书</string>
     <string name="audiobooks_tts_desc">在不打开阅读器的情况下，用文本转语音功能播放书籍。</string>
@@ -1775,7 +1775,7 @@
     <string name="settings_hub_literal_99">选择从外部打开的文件是否复制到应用书库</string>
     <string name="settings_hub_literal_100">严格的文件类型过滤</string>
     <string name="settings_hub_literal_101">导入选择器仅使用已知的阅读器文件类型</string>
-    <string name="settings_hub_literal_102">使用 PDF 文件名</string>
+    <string name="settings_hub_literal_102">优先显示 PDF 文件名</string>
     <string name="settings_hub_literal_103">阅读器标签页</string>
     <string name="settings_hub_literal_104">阅读器 AI 可见性</string>
     <string name="settings_hub_literal_105">帮助与反馈</string>
@@ -1847,8 +1847,8 @@
     <string name="audiobooks_hide_transcript">隐藏文字记录</string>
     <string name="listen_title">收听</string>
     <string name="listen_add">添加到收听</string>
-    <string name="listen_source_tts">TTS</string>
-    <string name="listen_search">搜索有声书和 TTS 书籍</string>
+    <string name="listen_source_tts">朗读</string>
+    <string name="listen_search">搜索书名或作者</string>
     <string name="listen_search_library_books">在书库中搜索</string>
     <string name="listen_sort_recently_listened">最近收听</string>
     <string name="listen_sort_recently_added">最近添加</string>
@@ -1863,7 +1863,7 @@
     <string name="listen_empty_desc">导入有声书，或从书库中选择一本书，用文字转语音收听。</string>
     <string name="listen_no_matches">没有与“%1$s”匹配的收听内容</string>
     <string name="listen_badge_audiobook">有声书</string>
-    <string name="listen_badge_tts">TTS</string>
+    <string name="listen_badge_tts">朗读</string>
     <string name="listen_timer">定时器</string>
     <string name="listen_chapter_number">第 %1$d 章</string>
     <string name="document_picker_unavailable">此设备上没有可用的文档选择器。</string>

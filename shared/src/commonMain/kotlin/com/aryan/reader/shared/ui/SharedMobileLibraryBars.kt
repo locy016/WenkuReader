@@ -141,6 +141,7 @@ fun SharedMobileEmptyLibrary(
     onSecondaryAction: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val libraryStyle = LocalSharedLibrarySurfaceStyle.current
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -172,7 +173,8 @@ fun SharedMobileEmptyLibrary(
             Spacer(Modifier.height(32.dp))
             FilledTonalButton(
                 onClick = onAction,
-                shape = MaterialTheme.shapes.medium,
+                shape = libraryStyle?.shape ?: MaterialTheme.shapes.medium,
+                border = libraryStyle?.outline,
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
@@ -181,7 +183,11 @@ fun SharedMobileEmptyLibrary(
         }
         if (secondaryActionLabel != null) {
             Spacer(Modifier.height(16.dp))
-            OutlinedButton(onClick = onSecondaryAction) {
+            OutlinedButton(
+                onClick = onSecondaryAction,
+                shape = libraryStyle?.shape ?: ButtonDefaults.shape,
+                border = libraryStyle?.outline ?: ButtonDefaults.outlinedButtonBorder(enabled = true),
+            ) {
                 Text(secondaryActionLabel)
             }
         }

@@ -83,10 +83,9 @@ fun EpubReaderSystemUiController(
 
         onDispose {
             Timber.d("Restoring system UI.")
-            WindowCompat.setDecorFitsSystemWindows(window, true)
             window.statusBarColor = originalStatusBarColor
             window.navigationBarColor = originalNavigationBarColor
-            insetsController.show(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.statusBars())
+            insetsController.show(WindowInsetsCompat.Type.navigationBars())
             insetsController.isAppearanceLightStatusBars = initialIsAppearanceLightStatusBars
             insetsController.isAppearanceLightNavigationBars = initialIsAppearanceLightNavigationBars
             insetsController.systemBarsBehavior = initialSystemBarsBehavior
@@ -113,8 +112,7 @@ fun EpubReaderSystemUiController(
         if (window != null) {
             val insetsController = WindowCompat.getInsetsController(window, view)
             val visibility = mobileEpubSystemBarsVisibility(systemUiMode, showBars)
-            if (visibility.statusBarsVisible) insetsController.show(WindowInsetsCompat.Type.statusBars())
-            else insetsController.hide(WindowInsetsCompat.Type.statusBars())
+            insetsController.hide(WindowInsetsCompat.Type.statusBars())
             if (visibility.navigationBarsVisible) insetsController.show(WindowInsetsCompat.Type.navigationBars())
             else insetsController.hide(WindowInsetsCompat.Type.navigationBars())
         }

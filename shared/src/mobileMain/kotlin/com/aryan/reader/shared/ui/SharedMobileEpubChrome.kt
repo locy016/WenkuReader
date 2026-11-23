@@ -116,6 +116,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aryan.reader.shared.ReaderTool
+import com.aryan.reader.shared.EpubOverflowMenuSection
 import com.aryan.reader.shared.ReaderToolbarPreferences
 import com.aryan.reader.shared.ReaderCloudTtsState
 import com.aryan.reader.shared.DEFAULT_CLOUD_TTS_SPEAKER_ID
@@ -318,7 +319,9 @@ fun SharedMobileEpubTopBar(
      * `safeDrawing`'s top inset.
      */
     topInset: Dp = 0.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    showBookmarkShortcut: Boolean = false,
 ) {
     // The overflow sections dismiss themselves through this shared state, so the host's `showMore`
     // flag stays the source of truth for the popup and the two are mirrored instead of duplicated.
@@ -445,6 +448,7 @@ fun SharedMobileEpubTopBar(
         toolOrder = sanitizedToolbarPreferences.toolOrder,
         hiddenToolNamesOrIds = sanitizedToolbarPreferences.hiddenToolIds,
     ).filter { tool -> tool != ReaderTool.AI_FEATURES || aiAvailable }
+    val bookmarkShortcutVisible = showBookmarkShortcut && sanitizedToolbarPreferences.isVisible(ReaderTool.BOOKMARK)
     val overflowSections = sharedEpubOverflowMenuSections(
         hiddenToolNamesOrIds = sanitizedToolbarPreferences.hiddenToolIds,
         hasHiddenToolbarTools = hiddenToolbarTools.isNotEmpty(),
@@ -452,7 +456,7 @@ fun SharedMobileEpubTopBar(
         hasDeleteReflow = onDeleteReflow != null,
         hasExportAnnotations = onExportAnnotations != null,
         supportsVolumeScroll = onToggleVolumeScroll != null,
-    )
+    ).filterNot { bookmarkShortcutVisible && it == EpubOverflowMenuSection.BOOKMARK }
     val overflowState = SharedReaderEpubOverflowState(
         isBookmarked = isBookmarked,
         isTtsActive = ttsBusy,
@@ -498,7 +502,8 @@ fun SharedMobileEpubTopBar(
     )
     SharedReaderToolbarSurface(
         height = SharedReaderEpubTopBarHeight + topInset,
-        modifier = modifier.testTag(SharedMobileEpubAxTags.TOP_BAR)
+        modifier = modifier.testTag(SharedMobileEpubAxTags.TOP_BAR),
+        containerColor = containerColor,
     ) {
         SharedEpubTopToolbarRow(topInset = topInset) {
             if (isSearchActive && searchContent != null) {
@@ -634,6 +639,25 @@ fun SharedMobileEpubTopBar(
                             }
                         }
                         else -> Unit
+                    }
+                }
+                if (bookmarkShortcutVisible) {
+                    val bookmarkAction = if (isBookmarked) {
+                        readerString("menu_remove_bookmark", "Remove bookmark")
+                    } else {
+                        readerString("menu_bookmark_this_page", "Bookmark this page")
+                    }
+                    SharedTooltipIconButton(
+                        text = bookmarkAction,
+                        onClick = onBookmark,
+                        modifier = Modifier.testTag("EpubTopBookmark")
+                            .semantics { contentDescription = bookmarkAction },
+                    ) {
+                        Icon(
+                            if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = null,
+                            tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
                 if (hasMediaOverlayNarration) {
@@ -878,7 +902,9 @@ fun SharedMobileEpubBottomBar(
     bottomInset: Dp = 0.dp,
     /** Android benchmark: the slider tool turns primary while the page slider is up. */
     isSliderActive: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    toolLabels: Map<ReaderTool, String> = emptyMap(),
 ) {
     // Android benchmark (`EpubReaderControls`): the same tooltip/accessibility pairs as the top bar.
     // `Modifier.semantics { }` is not a composable scope, so the labels are resolved up front.
@@ -955,7 +981,8 @@ fun SharedMobileEpubBottomBar(
     }
     SharedReaderToolbarSurface(
         height = SharedReaderEpubBottomBarHeight + bottomInset,
-        modifier = modifier.testTag(SharedMobileEpubAxTags.BOTTOM_BAR)
+        modifier = modifier.testTag(SharedMobileEpubAxTags.BOTTOM_BAR),
+        containerColor = containerColor,
     ) {
         Column(Modifier.fillMaxWidth()) {
             SharedEpubBottomToolbarRow {
@@ -964,6 +991,7 @@ fun SharedMobileEpubBottomBar(
                     when (tool) {
                         ReaderTool.TOC -> SharedTooltipIconButton(
                             text = tocText,
+                            buttonLabel = toolLabels[tool],
                             description = tocDescription,
                             onClick = onToc,
                             modifier = Modifier.testTag("EpubBottomToc")
@@ -973,6 +1001,7 @@ fun SharedMobileEpubBottomBar(
                         }
                         ReaderTool.FORMAT -> SharedTooltipIconButton(
                             text = formatText,
+                            buttonLabel = toolLabels[tool],
                             description = formatDescription,
                             onClick = onFormat,
                             modifier = Modifier.testTag("EpubBottomFormat")
@@ -982,6 +1011,7 @@ fun SharedMobileEpubBottomBar(
                         }
                         ReaderTool.SEARCH -> SharedTooltipIconButton(
                             text = searchText,
+                            buttonLabel = toolLabels[tool],
                             description = searchDescription,
                             onClick = onSearch,
                             modifier = Modifier.testTag("EpubBottomSearch")
@@ -1020,6 +1050,7 @@ fun SharedMobileEpubBottomBar(
                         }
                         ReaderTool.SLIDER -> SharedTooltipIconButton(
                             text = sliderText,
+                            buttonLabel = toolLabels[tool],
                             description = sliderDescription,
                             onClick = onOpenSlider,
                             modifier = Modifier.testTag("EpubBottomSlider")
@@ -1071,6 +1102,7 @@ fun SharedMobileEpubBottomBar(
                         }
                         ReaderTool.TTS_CONTROLS -> SharedTooltipIconButton(
                             text = readAloudText,
+                            buttonLabel = toolLabels[tool],
                             description = readAloudDescription,
                             onClick = { if (readAloudActive) onReadAloudStop() else onReadAloudToggle() },
                             modifier = Modifier.testTag("EpubBottomTts")

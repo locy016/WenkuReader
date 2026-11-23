@@ -2,32 +2,42 @@ package com.aryan.reader
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -44,9 +54,10 @@ fun ThemedBookCover(
     contentScale: ContentScale = ContentScale.Crop
 ) {
     val context = LocalContext.current
-    val coverFile = remember(item.coverImagePath) {
+    val coverDescription = contentDescription
+    val coverFile = remember(item.type, item.coverImagePath) {
         item.coverImagePath
-            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { item.type != FileType.TXT && it.isNotBlank() }
             ?.let(::File)
             ?.takeIf { it.isFile }
     }
@@ -64,18 +75,73 @@ fun ThemedBookCover(
         }
     }
 
-    Box(modifier = modifier) {
-        // Generated art is only a fallback: composing it under an opaque
-        // cover wastes a full gradient + text draw on every card.
-        if (coverRequest != null) {
-            AsyncImage(
-                model = coverRequest,
-                contentDescription = contentDescription,
-                contentScale = contentScale,
-                modifier = Modifier.fillMaxSize()
+    val category = item.libraryBookGroup().category
+    val palette = item.coverPalette(category)
+    BoxWithConstraints(modifier = modifier) {
+        val edge = (maxWidth * 0.018f).coerceIn(1.dp, 2.5.dp)
+        val shadow = (maxWidth * 0.028f).coerceIn(1.dp, 4.dp)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .absolutePadding(right = edge + shadow * 1.5f, bottom = edge + shadow * 2f),
+        ) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .absoluteOffset(x = edge, y = edge)
+                    .dropShadow(
+                        shape = LibrarySurfaceShape,
+                        shadow = Shadow(
+                            radius = shadow,
+                            color = CoverShadow,
+                            offset = DpOffset(shadow * 0.35f, shadow * 0.7f),
+                        ),
+                    )
+                    .clip(LibrarySurfaceShape)
+                    .drawWithCache {
+                        val pages = Brush.verticalGradient(
+                            0f to Color(0xFFF4F0E8),
+                            0.92f to Color(0xFFF4F0E8),
+                            1f to Color(0xFFC6BFB3),
+                        )
+                        onDrawBehind {
+                            drawRect(pages)
+                            drawRect(
+                                color = Color(0xFFA69F93),
+                                topLeft = Offset(0f, size.height - 0.5.dp.toPx()),
+                                size = Size(size.width, 0.5.dp.toPx()),
+                            )
+                        }
+                    },
             )
-        } else {
-            GeneratedBookCover(item = item, modifier = Modifier.fillMaxSize())
+            val face = Modifier.matchParentSize()
+                .border(
+                    0.5.dp,
+                    Brush.linearGradient(
+                        listOf(Color.White.copy(alpha = 0.65f), palette.accent.copy(alpha = 0.45f)),
+                    ),
+                    LibrarySurfaceShape,
+                )
+                .clip(LibrarySurfaceShape)
+                .coverSpine(palette, category.artwork)
+            // Generated art is only a fallback: composing it under an opaque
+            // cover wastes text measurement and paint on every card.
+            if (coverRequest != null) {
+                AsyncImage(
+                    model = coverRequest,
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    modifier = face.background(palette.paper),
+                )
+            } else {
+                GeneratedBookCover(
+                    item = item,
+                    palette = palette,
+                    modifier = face.clearAndSetSemantics {
+                        coverDescription?.let { this.contentDescription = it }
+                    },
+                )
+            }
         }
     }
 }
@@ -83,120 +149,137 @@ fun ThemedBookCover(
 @Composable
 private fun GeneratedBookCover(
     item: RecentFileItem,
+    palette: CoverPalette,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val seed = remember(item.bookId, item.displayName) { item.coverColorSeed() }
-    val base = generatedBookCoverColor(item)
-    val accent = remember(colorScheme, seed) {
-        val accentOptions = listOf(
-            colorScheme.primary,
-            colorScheme.secondary,
-            colorScheme.tertiary,
-            colorScheme.inversePrimary
-        )
-        accentOptions[(seed / 7) % accentOptions.size]
-    }
     val title = remember(item.customName, item.title, item.displayName) { item.coverTitle() }
     val author = remember(item.author) { item.coverAuthor() }
-    val coverGradient = remember(colorScheme, base, accent) {
-        Brush.linearGradient(
-            colors = listOf(
-                lerp(base, colorScheme.surface, 0.06f),
-                lerp(base, accent, 0.16f),
-                lerp(colorScheme.surfaceContainerHighest, base, 0.34f)
-            )
-        )
-    }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .background(coverGradient)
-            .border(0.5.dp, colorScheme.outlineVariant.copy(alpha = 0.35f))
-    ) {
-        val compact = maxWidth < 80.dp
+    BoxWithConstraints(modifier = modifier.background(Brush.verticalGradient(
+        colors = listOf(lerp(palette.paper, Color.White, 0.74f), palette.paper),
+    ))) {
+        val compact = maxWidth < 64.dp || maxHeight < 85.dp
+        val titleSize = (maxWidth.value * 0.10f).coerceIn(7f, 16f)
+        val maxTitleLines = if (compact) 2 else 3
+        val titleStyle = LocalTextStyle.current.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = titleSize.sp,
+            lineHeight = (titleSize * 1.26f).sp,
+            letterSpacing = 0.sp,
+            lineBreak = LineBreak.Heading,
+            textAlign = TextAlign.Center,
+        )
+        val titleWidth = with(LocalDensity.current) { (maxWidth * 0.78f).roundToPx() }
+        val measurer = rememberTextMeasurer(cacheSize = 1)
+        val balancedTitle = remember(title, titleWidth, titleStyle, maxTitleLines, measurer) {
+            if (titleWidth > 0 && title.length in 6..24 && title.all { Character.isIdeographic(it.code) }) {
+                val layout = measurer.measure(
+                    title,
+                    style = titleStyle,
+                    maxLines = maxTitleLines,
+                    constraints = Constraints(maxWidth = titleWidth),
+                )
+                if (layout.lineCount > 1 && !layout.hasVisualOverflow) {
+                    splitBalancedCoverTitle(title, layout.lineCount)
+                } else title
+            } else title
+        }
+        val textArea = Modifier.padding(start = maxWidth * 0.13f, end = maxWidth * 0.09f)
         Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .width(if (compact) 7.dp else 10.dp)
-                .background(accent.copy(alpha = 0.42f))
-                .align(Alignment.CenterStart)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .height(if (compact) 5.dp else 7.dp)
-                .align(Alignment.TopEnd)
-                .offset(y = if (compact) 8.dp else 12.dp)
-                .background(colorScheme.surface.copy(alpha = 0.30f))
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.48f)
-                .height(if (compact) 4.dp else 6.dp)
-                .align(Alignment.BottomStart)
-                .offset(x = if (compact) 12.dp else 18.dp, y = if (compact) (-10).dp else (-16).dp)
-                .background(accent.copy(alpha = 0.26f))
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = if (compact) 12.dp else 18.dp,
-                    top = if (compact) 10.dp else 18.dp,
-                    end = if (compact) 8.dp else 14.dp,
-                    bottom = if (compact) 10.dp else 16.dp
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(top = maxHeight * 0.14f)
+                .height(maxHeight * 0.46f)
+                .then(textArea),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = title,
-                color = colorScheme.onSurface,
-                fontSize = if (compact) 12.sp else 17.sp,
-                lineHeight = if (compact) 14.sp else 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+                text = balancedTitle,
+                modifier = Modifier.fillMaxWidth(),
+                style = titleStyle,
+                color = CoverInk,
+                maxLines = maxTitleLines,
+                overflow = TextOverflow.Ellipsis,
             )
-            if (author != null && !compact) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Box(
-                    modifier = Modifier
-                        .width(36.dp)
-                        .height(1.dp)
-                        .background(accent.copy(alpha = 0.55f))
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = author,
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+        }
+        if (author != null && maxWidth >= 54.dp && maxHeight >= 76.dp) {
+            val authorSize = (titleSize * 0.72f).coerceIn(7f, 11f)
+            Text(
+                text = author,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = maxHeight * 0.13f)
+                    .then(textArea),
+                color = lerp(CoverInk, palette.paper, 0.34f),
+                style = titleStyle.copy(
+                    fontWeight = FontWeight.Normal,
+                    fontSize = authorSize.sp,
+                    lineHeight = (authorSize * 1.25f).sp,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
-/** The stable tonal colour used by the generated cover when no artwork is available. */
-@Composable
-internal fun generatedBookCoverColor(item: RecentFileItem): Color {
-    val colorScheme = MaterialTheme.colorScheme
-    return remember(colorScheme, item.bookId, item.displayName) {
-        val baseOptions = listOf(
-            colorScheme.primaryContainer,
-            colorScheme.secondaryContainer,
-            colorScheme.tertiaryContainer,
-            lerp(colorScheme.primary, colorScheme.surface, 0.30f),
-            lerp(colorScheme.secondary, colorScheme.surface, 0.26f)
-        )
-        baseOptions[item.coverColorSeed() % baseOptions.size]
+private val CoverInk = Color(0xFF273242)
+private val CoverShadow = Color(0x60262F3B)
+
+private data class CoverPalette(val paper: Color, val accent: Color)
+
+private val coverPalettes = listOf(
+    CoverPalette(Color(0xFFE7EEE6), Color(0xFF8CAEA0)),
+    CoverPalette(Color(0xFFE8F1FA), Color(0xFF8FB3D4)),
+    CoverPalette(Color(0xFFF8EBE1), Color(0xFFDDA88B)),
+    CoverPalette(Color(0xFFF0EBF8), Color(0xFFAE9DCB)),
+    CoverPalette(Color(0xFFEEF1DD), Color(0xFFABB775)),
+    CoverPalette(Color(0xFFF5EEDC), Color(0xFFC7AC79)),
+    CoverPalette(Color(0xFFE4F2EF), Color(0xFF84BAAF)),
+    CoverPalette(Color(0xFFF7E8EA), Color(0xFFD09BAE)),
+)
+
+internal fun libraryCategoryAccent(category: LibraryBookCategory): Color =
+    coverPalettes[category.paletteIndex].accent
+
+private fun RecentFileItem.coverPalette(category: LibraryBookCategory): CoverPalette {
+    val family = coverPalettes[category.paletteIndex]
+    val variation = coverPalettes[coverColorSeed() % coverPalettes.size]
+    return CoverPalette(
+        lerp(family.paper, variation.paper, 0.18f),
+        lerp(family.accent, variation.accent, 0.18f),
+    )
+}
+
+private fun splitBalancedCoverTitle(title: String, lines: Int): String = buildString {
+    val baseLength = title.length / lines
+    val remainder = title.length % lines
+    var offset = 0
+    repeat(lines) { line ->
+        if (line > 0) append('\n')
+        val length = baseLength + if (line < remainder) 1 else 0
+        append(title, offset, offset + length)
+        offset += length
+    }
+}
+
+private fun Modifier.coverSpine(palette: CoverPalette, binding: CoverBinding): Modifier = drawWithCache {
+    val spineWidth = (size.width * binding.widthFraction).coerceIn(2.dp.toPx(), 9.dp.toPx())
+    val accent = palette.accent.copy(alpha = binding.tintOpacity)
+    val spine = Brush.horizontalGradient(
+        0f to CoverInk.copy(alpha = 0.21f),
+        0.17f to Color.White.copy(alpha = 0.40f),
+        0.32f to accent,
+        0.80f to accent,
+        0.90f to CoverInk.copy(alpha = 0.15f),
+        1f to Color.Transparent,
+        endX = spineWidth,
+    )
+    onDrawWithContent {
+        drawContent()
+        drawRect(spine, size = Size(spineWidth, size.height))
     }
 }
 
@@ -206,10 +289,10 @@ private fun RecentFileItem.coverColorSeed(): Int {
 }
 
 private fun RecentFileItem.coverTitle(): String {
-    return customName
-        ?.takeIf { it.isNotBlank() }
-        ?: title?.takeIf { it.isNotBlank() && !it.equals("content", ignoreCase = true) }
-        ?: displayName.substringBeforeLast('.', missingDelimiterValue = displayName)
+    val displayTitle = cardTitle()
+    return if (displayTitle == displayName || displayTitle.equals("content", ignoreCase = true)) {
+        displayName.substringBeforeLast('.', missingDelimiterValue = displayName)
+    } else displayTitle
 }
 
 private fun RecentFileItem.coverAuthor(): String? {

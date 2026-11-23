@@ -360,7 +360,6 @@ import com.aryan.reader.shared.reader.mobilePdfSystemBarBackdrops
 import com.aryan.reader.shared.reader.mobilePdfSystemBarsVisibility
 import com.aryan.reader.shared.reader.mobileReaderSystemBarIconFlags
 import com.aryan.reader.shared.reader.shouldPadPdfVerticalContentBelowStatusBar
-import com.aryan.reader.shared.reader.MobileReaderSystemBarsVisibility
 import com.aryan.reader.shared.reader.MobilePdfDocumentPresentation
 import com.aryan.reader.shared.reader.selectMobilePdfDocumentPresentation
 import com.aryan.reader.shared.ui.SharedMobileReaderLoadingIndicator
@@ -6188,7 +6187,7 @@ private fun PdfViewerDocumentSetup(
         onDispose {
             if (ownsPaneGlobals) window?.let {
                 val insetsController = WindowCompat.getInsetsController(it, view)
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
+                insetsController.show(WindowInsetsCompat.Type.navigationBars())
                 insetsController.isAppearanceLightStatusBars = initialIsAppearanceLightStatusBars
                 insetsController.isAppearanceLightNavigationBars = initialIsAppearanceLightNavigationBars
             }
@@ -6221,23 +6220,13 @@ private fun PdfViewerDocumentSetup(
         if (!ownsPaneGlobals) return@LaunchedEffect
         if (window != null) {
             val insetsController = WindowCompat.getInsetsController(window, view)
-            // Split view is immersive: the workspace owns the screen, so the
-            // system navigation bar hides away (a swipe reveals it
-            // transiently). The status bar stays visible for the workspace
-            // toolbar above the panes.
-            val visibility = if (isSplitPane) {
-                MobileReaderSystemBarsVisibility(statusBarsVisible = true, navigationBarsVisible = false)
-            } else {
-                mobilePdfSystemBarsVisibility(systemUiMode, showStandardBars)
-            }
-            if (visibility.statusBarsVisible) insetsController.show(WindowInsetsCompat.Type.statusBars())
-            else insetsController.hide(WindowInsetsCompat.Type.statusBars())
-            if (visibility.navigationBarsVisible) insetsController.show(WindowInsetsCompat.Type.navigationBars())
+            val navigationBarsVisible = !isSplitPane &&
+                mobilePdfSystemBarsVisibility(systemUiMode, showStandardBars).navigationBarsVisible
+            insetsController.hide(WindowInsetsCompat.Type.statusBars())
+            if (navigationBarsVisible) insetsController.show(WindowInsetsCompat.Type.navigationBars())
             else insetsController.hide(WindowInsetsCompat.Type.navigationBars())
-            if (!visibility.statusBarsVisible || !visibility.navigationBarsVisible) {
-                insetsController.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
+            insetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 

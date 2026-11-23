@@ -2,6 +2,7 @@ package com.aryan.reader
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -31,6 +31,7 @@ import com.aryan.reader.shared.search.SharedContentSearchHitVisibility
 import com.aryan.reader.shared.search.SharedGlobalSearchBookResult
 import com.aryan.reader.shared.search.SharedGlobalSearchHit
 import com.aryan.reader.shared.ui.SharedContentSearchSnippet
+import com.aryan.reader.shared.ui.LocalSharedLibrarySurfaceStyle
 
 /**
  * One inside-file content match for Library Beta: book identity, the chunk of
@@ -52,17 +53,24 @@ internal fun LibraryContentSearchResultRow(
     onHitClick: (SharedGlobalSearchHit) -> Unit = {},
     usePdfFileNameAsDisplayName: Boolean = false,
     modifier: Modifier = Modifier,
+    animateOpening: Boolean = false,
 ) {
     val visibleHits = SharedContentSearchHitVisibility.hitsFor(result, expanded)
     val hiddenMatches = SharedContentSearchHitVisibility.hiddenMatchCount(result, expanded)
+    val coverTap = rememberLibraryCoverTap(item, animateOpening)
+    val outline = LocalSharedLibrarySurfaceStyle.current?.outline
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .then(outline?.let { Modifier.border(it, LibrarySurfaceShape) } ?: Modifier)
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    coverTap?.record(item)
+                    onClick()
+                },
                 onLongClick = onLongClick,
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = LibrarySurfaceShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
@@ -72,7 +80,7 @@ internal fun LibraryContentSearchResultRow(
                 ThemedBookCover(
                     item = item,
                     contentDescription = item.displayName,
-                    modifier = Modifier.size(width = 40.dp, height = 56.dp),
+                    modifier = Modifier.size(width = 40.dp, height = 56.dp).recordLibraryCover(coverTap),
                 )
                 Column(
                     Modifier.weight(1f).padding(start = 12.dp),

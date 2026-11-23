@@ -57,12 +57,9 @@ internal class AndroidAppGraph(context: Context) {
     val feedbackRepository = FeedbackRepository(context)
     val fontsRepository = FontsRepository(context)
 
-    fun libraryMutationController(
-        onShelfChanged: suspend (String) -> Unit,
-    ): LibraryMutationController = LibraryMutationController(
+    fun libraryMutationController(): LibraryMutationController = LibraryMutationController(
         store = libraryStore,
         newId = { UUID.randomUUID().toString() },
         nowMillis = System::currentTimeMillis,
-        onShelfChanged = onShelfChanged,
     )
 }

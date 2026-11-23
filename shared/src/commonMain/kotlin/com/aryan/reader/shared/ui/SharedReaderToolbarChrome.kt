@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ScrollState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
@@ -143,6 +144,7 @@ fun SharedReaderBarVisibility(
 fun SharedReaderToolbarSurface(
     modifier: Modifier = Modifier,
     height: Dp? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
     content: @Composable () -> Unit,
 ) {
     val surfaceModifier = if (height == null) {
@@ -152,7 +154,8 @@ fun SharedReaderToolbarSurface(
     }
     Surface(
         modifier = surfaceModifier,
-        color = MaterialTheme.colorScheme.surface,
+        color = containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 4.dp,
         content = content,
     )

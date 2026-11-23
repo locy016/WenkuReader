@@ -31,7 +31,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,8 +54,10 @@ import timber.log.Timber
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.ui.Alignment
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.aryan.reader.tts.ACTION_OPEN_TTS_SESSION
@@ -96,9 +97,11 @@ open class MainActivity : AppCompatActivity() {
         splash.setKeepOnScreenCondition { !viewModel.startupGatePassed.value }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        WindowCompat.getInsetsController(window, window.decorView).systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        hideStatusBar()
 
         platformFeaturesRepository = PlatformFeaturesRepository(this)
-        DebugFpsStore.init(applicationContext)
 
         lifecycleScope.launch {
             viewModel.reviewRequestEvent.collect {
@@ -168,7 +171,6 @@ open class MainActivity : AppCompatActivity() {
     ) {
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val customFonts by viewModel.customFonts.collectAsStateWithLifecycle()
-        val debugFpsEnabled by DebugFpsStore.enabled.collectAsStateWithLifecycle()
 
         ScreenCaptureProtectionEffect(enabled = uiState.isScreenCaptureProtectionEnabled)
 
@@ -217,29 +219,24 @@ open class MainActivity : AppCompatActivity() {
                 color = MaterialTheme.colorScheme.background
             ) {
                 CompositionLocalProvider(LocalUriHandler provides safeUriHandler) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AppNavigation(
-                            navController = navController,
-                            windowSizeClass = windowSizeClass,
-                            viewModel = viewModel
-                        )
-                        // Debug-only global FPS meter: beneath the status
-                        // bar, top-left, above every destination. Gated
-                        // twice (here + inside) so release builds pay
-                        // nothing and never compose the Choreographer loop.
-                        if (BuildConfig.DEBUG && debugFpsEnabled) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                contentAlignment = Alignment.TopStart
-                            ) {
-                                DebugFpsGlobalOverlay(enabled = true)
-                            }
-                        }
-                    }
+                    AppNavigation(
+                        navController = navController,
+                        windowSizeClass = windowSizeClass,
+                        viewModel = viewModel
+                    )
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideStatusBar()
+    }
+
+    private fun hideStatusBar() {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .hide(WindowInsetsCompat.Type.statusBars())
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +94,8 @@ data class SharedAndroidFolderSyncStrings(
     val cloudDownloaded: String = "Downloaded from Drive",
     val cloudAvailable: String = "Available in Drive",
     val cloudChooseAction: String = "Choose download option",
+    val permissionMissing: String = "Folder permission needed",
+    val reconnect: String = "Grant access again",
 )
 
 /** Exact Android folder-sync screen; storage/scanning/date formatting remain platform adapters. */
@@ -120,10 +121,16 @@ fun SharedAndroidFolderSyncScreen(
     onCloudFolderSettingsClick: (() -> Unit)? = null,
     onOpenIncomingCloudFolder: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    authorizedFolderUris: Set<String>? = null,
+    onFolderMetadata: ((SyncedFolder) -> Unit)? = null,
+    onReconnectFolder: ((SyncedFolder) -> Unit)? = null,
 ) {
     var editingFolder by remember { mutableStateOf<SyncedFolder?>(null) }
     var disablingFolder by remember { mutableStateOf<SyncedFolder?>(null) }
-    val hasEnabledFolders = folders.any { it.localSyncEnabled && !it.isCloudPlaceholder }
+    fun needsPermission(folder: SyncedFolder): Boolean =
+        !folder.isAppManaged && !folder.isCloudPlaceholder &&
+            authorizedFolderUris?.contains(folder.uriString) == false
+    val hasEnabledFolders = folders.any { it.localSyncEnabled && !it.isCloudPlaceholder && !needsPermission(it) }
     val canAddFolder = folders.count { !it.isAppManaged && !it.isCloudPlaceholder } < 10
     // This screen is a section inside the unified library Scaffold, so it must not
     // apply window insets itself: the host already converts them into content padding.
@@ -158,7 +165,7 @@ fun SharedAndroidFolderSyncScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(if (isLoading) strings.scanning else strings.scanAll)
                     }
-                    OutlinedButton(
+                    if (onFolderMetadata == null) OutlinedButton(
                         onClick = onSyncMetadata,
                         enabled = !isLoading && hasEnabledFolders,
                         modifier = Modifier.weight(1f),
@@ -199,11 +206,15 @@ fun SharedAndroidFolderSyncScreen(
                         onEdit = { editingFolder = folder },
                         onOpenCloudSettings = onCloudFolderSettingsClick,
                         onOpenIncomingCloudFolder = onOpenIncomingCloudFolder,
+                        onUpdateReadingData = onFolderMetadata?.takeIf {
+                            folder.localSyncEnabled && !isLoading && !needsPermission(folder)
+                        }?.let { action -> { action(folder) } },
+                        onReconnect = onReconnectFolder?.takeIf { needsPermission(folder) }?.let { action -> { action(folder) } },
                     )
                 }
             }
         }
-        if (canAddFolder) {
+        if (canAddFolder && folders.isNotEmpty()) {
             ExtendedFloatingActionButton(
                 text = { Text(strings.addFolder) },
                 icon = { Icon(Icons.Default.Add, strings.addDescription) },
@@ -259,6 +270,8 @@ private fun SharedAndroidFolderCard(
     onEdit: () -> Unit,
     onOpenCloudSettings: (() -> Unit)?,
     onOpenIncomingCloudFolder: ((String) -> Unit)?,
+    onUpdateReadingData: (() -> Unit)?,
+    onReconnect: (() -> Unit)?,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     ElevatedCard(
@@ -305,6 +318,9 @@ private fun SharedAndroidFolderCard(
                     Box {
                         IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, strings.optionsDescription) }
                         SharedDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            onUpdateReadingData?.let { update ->
+                                DropdownMenuItem(text = { Text(strings.syncMetadata) }, onClick = { showMenu = false; update() })
+                            }
                             DropdownMenuItem(text = { Text(strings.editFilters) }, onClick = { showMenu = false; onEdit() })
                             DropdownMenuItem(
                                 text = { Text(if (folder.localSyncEnabled) strings.disableLocalSync else strings.enableLocalSync) },
@@ -343,6 +359,10 @@ private fun SharedAndroidFolderCard(
                     }
                 }
             } else {
+                if (onReconnect != null) {
+                    Text(strings.permissionMissing, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onReconnect) { Text(strings.reconnect) }
+                }
                 HorizontalDivider(Modifier.padding(vertical = 12.dp))
                 Row(Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
@@ -358,7 +378,12 @@ private fun SharedAndroidFolderCard(
                     Spacer(Modifier.height(12.dp))
                     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         stats.countsByType.forEach { (type, count) ->
-                            AssistChip(onClick = {}, label = { Text(strings.filterCount(type, count)) })
+                            Text(
+                                text = strings.filterCount(type, count),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
                         }
                     }
                 }

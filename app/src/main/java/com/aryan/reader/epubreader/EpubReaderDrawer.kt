@@ -36,7 +36,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
@@ -55,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -98,9 +101,12 @@ fun EpubReaderDrawerSheet(
     onHighlightColorChange: (UserHighlight, Int) -> Unit,
     onExportAnnotations: (() -> Unit)? = null,
     readerMotionPolicy: ReaderMotionPolicy = ReaderMotionPolicy(),
+    locateCurrentOnOpen: Boolean = false,
 ) {
     ModalDrawerSheet(
-        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
+        modifier = Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top)),
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.96f),
+        drawerContentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         val drawerPagerState = rememberPagerState(pageCount = { 4 })
         val drawerScope = rememberCoroutineScope()
@@ -109,6 +115,7 @@ fun EpubReaderDrawerSheet(
 
             ScrollableTabRow(
                 selectedTabIndex = drawerPagerState.currentPage,
+                containerColor = Color.Transparent,
                 edgePadding = 0.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -169,7 +176,8 @@ fun EpubReaderDrawerSheet(
                         renderMode = renderMode,
                         onNavigateToTocEntry = onNavigateToTocEntry,
                         onNavigateToChapter = onNavigateToChapter,
-                        activeFragmentId = activeFragmentId
+                        activeFragmentId = activeFragmentId,
+                        locateCurrentOnOpen = locateCurrentOnOpen,
                     )
                     1 -> BookmarksList(
                         bookmarks = bookmarks,
@@ -212,6 +220,7 @@ private fun ChaptersList(
     currentChapterInPaginatedMode: Int?,
     renderMode: RenderMode,
     activeFragmentId: String?,
+    locateCurrentOnOpen: Boolean,
     onNavigateToTocEntry: (EpubTocEntry) -> Unit,
     onNavigateToChapter: (Int) -> Unit
 ) {
@@ -254,6 +263,8 @@ private fun ChaptersList(
         },
         labelOf = { it.label },
         depthOf = { it.depth },
+        locateCurrentOnOpen = locateCurrentOnOpen,
+        showTreeActionsForFlatContents = false,
         keyOf = { index, entry -> "${entry.absolutePath}_${entry.fragmentId}_$index" },
         collapseDescription = stringResource(R.string.content_desc_collapse),
         expandDescription = stringResource(R.string.content_desc_expand),

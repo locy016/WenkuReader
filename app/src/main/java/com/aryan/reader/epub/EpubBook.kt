@@ -71,7 +71,7 @@ fun EpubBook.hasReadableExtractedContent(): Boolean {
         extractionBasePathPresent = hasBasePath,
         extractionDirectoryPresent = hasDirectory,
         chapterCount = chapters.size,
-        extractionDirectoryHasEntries = hasDirectory && extractionDir.list()?.isNotEmpty() == true,
+        extractionDirectoryHasEntries = hasDirectory && chapters.isEmpty() && extractionDir.list()?.isNotEmpty() == true,
         allChapterFilesPresent = hasDirectory && chapters.all { chapter ->
             File(extractionDir, chapter.contentFilePath()).isFile
         }

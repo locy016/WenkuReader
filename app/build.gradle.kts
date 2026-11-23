@@ -4,6 +4,7 @@ import com.android.build.api.artifact.SingleArtifact
 import java.util.Properties
 import java.io.File
 import java.io.StringReader
+import java.security.MessageDigest
 import javax.xml.parsers.DocumentBuilderFactory
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Copy
@@ -33,6 +34,18 @@ if (localPropertiesFile.exists()) {
 // with the same NDK clang. CI greps this line and installs that NDK before Gradle
 // runs, because the cargo target linker is resolved at configuration time.
 val androidNdkVersion = "28.2.13676358"
+val prebuiltNativeDir = providers.gradleProperty("wenkuReader.prebuiltNativeDir").orNull?.let(::file)
+val useVerifiedReleaseNative = providers.gradleProperty("wenkuReader.useVerifiedReleaseNative").orNull == "true"
+// Native source is unchanged from Episteme v1.0.59-oss. Pin both upstream ARM builds
+// so an arbitrary local debug library cannot be packaged in a release.
+val verifiedReleaseNativeSha256 = mapOf(
+    "arm64-v8a/libmobi.so" to "842cf9c272fcc8a759e2348b29d20d9bed8ca2594dcb0a8bb63ecd1f64682871",
+    "arm64-v8a/libnative-lib.so" to "128851d77062e0201c4e0a7fa77317ee993dab5ec894b042c7cb9303cd05153f",
+    "arm64-v8a/liboffice_oxide_bridge.so" to "7097ae96083129fa47ad7993985beebfdd236856f3f32234d55d5255c1e2fb3b",
+    "armeabi-v7a/libmobi.so" to "575f69cb47b8b5ae7c700e29e8208f78a9b69eee56ddc04cc9b7b8b5bb5922b0",
+    "armeabi-v7a/libnative-lib.so" to "21abe4d8421e01e66c16bfdfc420b42465f1137e22e5911053482763b75b6ba6",
+    "armeabi-v7a/liboffice_oxide_bridge.so" to "5c86c4c2ea1a50ba79c5dc95dcbe2f3d66e7b14d97782f8c3d0f525f6271ad8a",
+)
 
 fun configuredAppLocaleTags(): Set<String> {
     val localesConfigXml = providers
@@ -72,11 +85,19 @@ android {
     ndkVersion = androidNdkVersion
 
     defaultConfig {
-        applicationId = "com.aryan.reader"
+        applicationId = "app.juanzhou.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 65
-        versionName = "1.0.59"
+        versionCode = 28
+        versionName = "0.1.7"
+
+        if (prebuiltNativeDir != null) {
+            val abis = prebuiltNativeDir.listFiles().orEmpty()
+                .filter { it.isDirectory && it.resolve("libnative-lib.so").isFile }
+                .map(File::getName)
+            require(abis.isNotEmpty()) { "No native Android libraries found in $prebuiltNativeDir" }
+            ndk { abiFilters += abis }
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
@@ -92,8 +113,6 @@ android {
     productFlavors {
         create("oss") {
             dimension = "version"
-            applicationIdSuffix = ".oss"
-            versionNameSuffix = "-oss"
             buildConfigField("String", "AI_WORKER_URL", "\"\"")
             buildConfigField("String", "VERIFIER_WORKER_URL", "\"\"")
             buildConfigField("String", "FEEDBACK_WORKER_URL", "\"\"")
@@ -130,6 +149,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            versionNameSuffix = "-dev.28"
+        }
+
         release {
             val storePath = localProperties.getProperty("MYAPP_RELEASE_STORE_FILE")
             if (!storePath.isNullOrEmpty()) {
@@ -172,10 +195,12 @@ android {
         singleVariant("release") {
         }
     }
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    if (prebuiltNativeDir == null) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
         }
     }
     testOptions {
@@ -203,7 +228,23 @@ android {
 
 androidComponents {
     onVariants(selector().all()) { variant ->
-        val flavor = variant.productFlavors.firstOrNull()?.second.orEmpty()
+        if (prebuiltNativeDir != null && variant.buildType != "debug") {
+            tasks.matching { it.name == "pre${variant.name.replaceFirstChar { it.uppercase() }}Build" }
+                .configureEach {
+                    doFirst {
+                        require(useVerifiedReleaseNative) { "A prebuilt release must opt in to the pinned native libraries." }
+                        val relativeFiles = prebuiltNativeDir.walkTopDown()
+                            .filter { it.isFile }.associateBy { it.relativeTo(prebuiltNativeDir).invariantSeparatorsPath }
+                        require(relativeFiles.keys == verifiedReleaseNativeSha256.keys) { "Incomplete or unexpected release native library set." }
+                        for ((relativePath, expected) in verifiedReleaseNativeSha256) {
+                            val bytes = MessageDigest.getInstance("SHA-256")
+                                .digest(relativeFiles.getValue(relativePath).readBytes())
+                            val actual = bytes.joinToString("") { "%02x".format(it) }
+                            require(actual == expected) { "Native library does not match the pinned release: $relativePath" }
+                        }
+                    }
+                }
+        }
         val buildType = variant.buildType.orEmpty()
         val versionName = variant.outputs.single().versionName
         val taskName = "copy${variant.name.replaceFirstChar { it.uppercase() }}Apk"
@@ -213,7 +254,7 @@ androidComponents {
             include("*.apk")
             into(layout.buildDirectory.dir("outputs/renamed-apk/${variant.name}"))
             rename {
-                "Episteme-$flavor-v${versionName.get()}-$buildType.apk"
+                "WenkuReader-v${versionName.get()}-$buildType.apk"
             }
         }
 
@@ -443,12 +484,12 @@ android {
         getByName("main") {
             // Cargo output staged by the stageOfficeOxide*JniLibs tasks.
             // `srcDir` is deprecated in AGP 9; `directories` is its replacement.
-            jniLibs.directories.add(officeOxideJniLibsDir.get().asFile.absolutePath)
+            jniLibs.directories.add((prebuiltNativeDir ?: officeOxideJniLibsDir.get().asFile).absolutePath)
         }
     }
 }
 
-val officeOxideStagingTasks = officeOxideAbis.map { (abi, triple) ->
+val officeOxideStagingTasks = officeOxideAbis.filter { prebuiltNativeDir == null }.map { (abi, triple) ->
     registerOfficeOxideLibrary(abi, triple)
 }
 

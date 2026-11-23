@@ -8,7 +8,6 @@
  * - `SettingsScreen` — the dialogs, `DeviceManagementScreen`, `AppThemeBottomSheet`,
  *   `LanguageSelectionDialog`
  * - `UnifiedLibraryScreen` — `AppDrawerContent`
- * - `DebugFpsOverlay` — `FpsMonitor`
  *
  * Splitting this into per-concern files is mechanical and safe, but it is pure relocation with no
  * behavior change, so it is deliberately not done here: renaming churn is not worth a diff's worth
@@ -29,45 +28,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,19 +60,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
-import androidx.navigation.NavHostController
 import com.aryan.reader.data.RecentFileItem
-import com.aryan.reader.shared.formatMicrosUsd
-import com.aryan.reader.shared.ui.AppIcon
-import com.aryan.reader.shared.ui.SharedMobileAppDestination
 import com.aryan.reader.shared.ui.SharedMobileLanguageSelectionList
 import com.aryan.reader.shared.ui.SharedAppThemeBottomSheet
 import java.text.SimpleDateFormat
@@ -110,9 +88,12 @@ fun RecentFileCard(
     onLongClick: () -> Unit,
     isDownloading: Boolean,
     usePdfFileNameAsDisplayName: Boolean = false,
+    animateOpening: Boolean = false,
+    compact: Boolean = false,
 ) {
     val progressPercent = item.progressPercentage?.takeIf { it > 0f }?.coerceIn(0f, 100f)?.toInt()
-    val authorText = item.author?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) } ?: " "
+    val authorText = item.cardAuthor()
+    val coverTap = rememberLibraryCoverTap(item, animateOpening)
     com.aryan.reader.shared.ui.SharedAndroidHomeRecentCard(
         bookId = item.bookId,
         title = item.cardTitle(usePdfFileNameAsDisplayName),
@@ -121,325 +102,36 @@ fun RecentFileCard(
         isAvailable = item.isAvailable,
         isDownloading = isDownloading,
         isSelected = isSelected,
-        hasCustomCover = !item.coverImagePath.isNullOrBlank(),
-        showStatusBadges = item.sourceFolderUri != null || item.isOpdsStream() || isPinned,
+        showStatusBadges = isPinned,
         unavailableDescription = stringResource(R.string.not_available_locally),
         selectedDescription = stringResource(R.string.content_desc_selected),
-        onClick = onClick,
+        onClick = {
+            coverTap?.record(item)
+            onClick()
+        },
         onLongClick = onLongClick,
         modifier = modifier,
+        compact = compact,
         cover = { coverModifier ->
-                ThemedBookCover(
-                    item = item,
-                    contentDescription = item.displayName,
-                    contentScale = ContentScale.Crop,
-                    modifier = coverModifier,
-                )
+            ThemedBookCover(
+                item = item,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = coverModifier.recordLibraryCover(coverTap),
+            )
         },
         statusBadges = { badgeModifier ->
-                    FileStatusBadges(
-                        item = item,
-                        isPinned = isPinned,
-                        overlay = true,
+            FileStatusBadges(
+                item = item,
+                isPinned = isPinned,
+                overlay = true,
                 modifier = badgeModifier,
-                    )
+            )
         },
-        fileTypeBadge = { compact ->
-                    FileTypeBadge(
-                        type = item.type,
-                        overlay = true,
-                compact = compact,
-                    )
+        fileTypeBadge = {
+            FileTypeBadge(type = item.type, compact = true)
         },
     )
-}
-
-@Suppress("KotlinConstantConditions")
-@Composable
-internal fun AppDrawerContent(
-    uiState: ReaderScreenState,
-    onSignInClick: () -> Unit,
-    onSignOutClick: () -> Unit,
-    onSyncToggle: (Boolean) -> Unit,
-    onUpgradeClick: () -> Unit,
-    onSyncUpsellClick: () -> Unit,
-    onFontsClick: () -> Unit,
-    onAiSettingsClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    navController: NavHostController,
-    onFolderSyncSettingsClick: () -> Unit,
-    onAboutClick: (() -> Unit)? = null,
-    showFonts: Boolean = true,
-    showAiSettings: Boolean = true,
-    showSupportProject: Boolean = false,
-) {
-    val isOss = BuildConfig.FLAVOR == "oss"
-
-    ModalDrawerSheet {
-        Column(modifier = Modifier.fillMaxHeight()) {
-            if (!isOss) {
-                if (uiState.currentUser != null) {
-                    // Signed-in: Show user info at the top
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AndroidAccountAvatar(
-                            user = uiState.currentUser,
-                            modifier = Modifier.size(80.dp),
-                            contentDescription = stringResource(R.string.content_desc_profile_picture),
-                        )
-                        uiState.currentUser.displayName?.let { name ->
-                            Text(text = name, style = MaterialTheme.typography.titleMedium)
-                        }
-                        uiState.currentUser.email?.let { email ->
-                            Text(text = email, style = MaterialTheme.typography.bodyMedium)
-                        }
-                        if (BuildConfig.FLAVOR == "pro") {
-                            Surface(
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                shape = CircleShape,
-                                modifier = Modifier.padding(top = 8.dp)
-                            ) {
-                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.FormatListNumbered, contentDescription = stringResource(R.string.credits_tab), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(safeStringResource(R.string.wallet_balance, formatMicrosUsd(uiState.walletMicros)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Signed-out: Show Sign In button at the top
-                    Spacer(modifier = Modifier.height(8.dp))
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Outlined.AccountCircle, contentDescription = null) },
-                        label = { Text(stringResource(R.string.drawer_sign_in)) },
-                        selected = false,
-                        onClick = onSignInClick,
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // LegalText
-                    LegalText(
-                        prefixText = stringResource(R.string.drawer_by_signing_in),
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                        textAlign = TextAlign.Start
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
-                    label = {
-                        val text = if (uiState.isProUser) stringResource(R.string.drawer_pro_unlocked) else stringResource(R.string.drawer_upgrade_pro)
-                        Text(text)
-                    },
-                    selected = false,
-                    onClick = onUpgradeClick,
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-
-                // Sync Toggle Item
-                if (uiState.currentUser != null) {
-                    NavigationDrawerItem(
-                        icon = { Icon(painterResource(id = R.drawable.sync), contentDescription = null) },
-                        label = { Text(stringResource(R.string.drawer_sync_library)) },
-                        badge = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (!uiState.isProUser) {
-                                    Icon(
-                                        imageVector = Icons.Default.VerifiedUser,
-                                        contentDescription = stringResource(R.string.content_desc_pro_feature),
-                                        modifier = Modifier.size(20.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
-                                Switch(
-                                    checked = uiState.isSyncEnabled, onCheckedChange = {
-                                        if (uiState.isProUser) onSyncToggle(it) else onSyncUpsellClick()
-                                    }, enabled = uiState.isProUser
-                                )
-                            }
-                        }, selected = false, onClick = {
-                            if (uiState.isProUser) {
-                                onSyncToggle(!uiState.isSyncEnabled)
-                            } else {
-                                onSyncUpsellClick()
-                            }
-                        }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
-                if (uiState.canUseCloudFolderSync()) {
-                    NavigationDrawerItem(
-                        icon = { Icon(imageVector = Icons.Default.FolderSpecial, contentDescription = null) },
-                        label = {
-                            Column {
-                                Text(stringResource(R.string.drawer_folder_sync))
-                                Text(
-                                    if (uiState.isSyncEnabled) {
-                                        stringResource(R.string.drawer_folder_sync_desc)
-                                    } else {
-                                        stringResource(R.string.folder_sync_library_sync_off)
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        badge = { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null) },
-                        selected = false,
-                        onClick = onFolderSyncSettingsClick,
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                            .testTag("MobileDrawerFolderSyncSettings")
-                    )
-                }
-            } else {
-                // OSS Header
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AppIcon(
-                        contentDescription = stringResource(R.string.content_desc_app_icon),
-                        size = 64.dp,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = stringResource(R.string.app_name_oss), style = MaterialTheme.typography.titleMedium)
-                }
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            }
-
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                label = { Text(stringResource(R.string.settings)) },
-                selected = false,
-                onClick = onSettingsClick,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-            )
-
-            onAboutClick?.let { onClick ->
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                    label = { Text(stringResource(R.string.about_title)) },
-                    selected = false,
-                    onClick = onClick,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
-
-            if (showFonts) {
-                NavigationDrawerItem(
-                    icon = { Icon(painterResource(id = R.drawable.fonts), contentDescription = null) },
-                    label = { Text(stringResource(R.string.drawer_custom_fonts)) },
-                    selected = false,
-                    onClick = onFontsClick,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
-
-            if (showAiSettings && !BuildConfig.IS_OFFLINE) {
-                NavigationDrawerItem(
-                    icon = { Icon(painterResource(id = R.drawable.ai), contentDescription = null) },
-                    label = { Text(stringResource(R.string.ai_settings_title)) },
-                    selected = false,
-                    onClick = onAiSettingsClick,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
-
-            if (isOss || showSupportProject) {
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Outlined.FavoriteBorder, contentDescription = null) },
-                    label = { Text(stringResource(R.string.drawer_support_project)) },
-                    selected = false,
-                    onClick = { navController.navigateIfReady(SharedMobileAppDestination.SUPPORT_PROJECT) },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
-
-            NavigationDrawerItem(
-                icon = { Icon(painterResource(id = R.drawable.feedback), contentDescription = null) },
-                label = { Text(stringResource(R.string.drawer_help_feedback)) },
-                selected = false,
-                onClick = { navController.navigateIfReady(SharedMobileAppDestination.FEEDBACK) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-            )
-
-            if (!isOss) {
-                if (uiState.currentUser != null) {
-                    NavigationDrawerItem(
-                        icon = { Icon(painterResource(id = R.drawable.logout), contentDescription = null) },
-                        label = { Text(stringResource(R.string.drawer_sign_out)) },
-                        selected = false,
-                        onClick = onSignOutClick,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // legal links
-            run {
-                val uriHandler = LocalUriHandler.current
-                val baseStyle = MaterialTheme.typography.labelMedium
-                var scaledTextStyle by remember { mutableStateOf(baseStyle) }
-
-                Text(
-                    text = stringResource(R.string.legal_footer_combined),
-                    style = scaledTextStyle,
-                    maxLines = 1,
-                    softWrap = false,
-                    onTextLayout = {
-                        if (it.didOverflowWidth) {
-                            scaledTextStyle =
-                                scaledTextStyle.copy(fontSize = scaledTextStyle.fontSize * 0.95)
-                        }
-                    },
-                    modifier = Modifier.height(0.dp)
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp, start = 8.dp, end = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.legal_privacy_policy),
-                        style = scaledTextStyle.copy(color = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.clickable { uriHandler.openUri(PRIVACY_POLICY_URL) },
-                        softWrap = false
-                    )
-                    Text("  •  ", style = scaledTextStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-                    Text(
-                        text = stringResource(R.string.legal_terms_of_service),
-                        style = scaledTextStyle.copy(color = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.clickable { uriHandler.openUri(TERMS_URL) },
-                        softWrap = false
-                    )
-                    Text("  •  ", style = scaledTextStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-                    Text(
-                        text = stringResource(R.string.legal_licenses),
-                        style = scaledTextStyle.copy(color = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.clickable { uriHandler.openUri(LICENSES_URL) },
-                        softWrap = false
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -565,13 +257,6 @@ fun ClearAllDataConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit)
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         })
-}
-
-@Deprecated("Use DebugFpsOverlay (global, Choreographer-based). Kept for binary compat only.")
-@Composable
-fun FpsMonitor(modifier: Modifier = Modifier) {
-    if (!BuildConfig.DEBUG) return
-    DebugFpsOverlay(modifier = modifier)
 }
 
 @Composable

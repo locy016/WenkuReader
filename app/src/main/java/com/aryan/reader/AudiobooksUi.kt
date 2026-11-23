@@ -394,7 +394,7 @@ internal fun AudiobooksLibrarySection(
     }
     val sharedTtsItems = remember(libraryBooks, ttsProgress) {
         com.aryan.reader.shared.buildSharedTtsListenItems(
-            books = libraryBooks.map(RecentFileItem::toSharedBookItem),
+            books = libraryBooks.map { item -> item.toSharedBookItem().copy(title = item.cardTitle()) },
             progress = ttsProgress.map { progress ->
                 com.aryan.reader.shared.SharedBookTtsListeningProgress(
                     bookId = progress.bookId,
@@ -435,6 +435,12 @@ internal fun AudiobooksLibrarySection(
             adapterLibraryBooksById[item.book.id]?.let(onPlayTtsClick)
         },
         onAddAudiobook = onAddAudiobookClick,
+        hideSingleSourceSwitcher = true,
+        ttsCover = { book, coverModifier ->
+            adapterLibraryBooksById[book.id]?.let { item ->
+                ThemedBookCover(item, modifier = coverModifier, contentDescription = null)
+            }
+        },
         modifier = modifier,
     )
 }

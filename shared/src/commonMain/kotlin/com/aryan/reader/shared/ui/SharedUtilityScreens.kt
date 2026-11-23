@@ -130,8 +130,10 @@ fun SharedAndroidAboutDialog(
         title = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text(strings.appName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(2.dp))
-                Text(strings.flavorLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                if (strings.flavorLabel.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(strings.flavorLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
             }
         },
         text = {
@@ -140,7 +142,9 @@ fun SharedAndroidAboutDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(strings.versionLabel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(strings.buildLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (strings.buildLabel.isNotBlank()) {
+                    Text(strings.buildLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(20.dp))
                 if (showGitHub) {
                     SharedAndroidAboutInfoRow(

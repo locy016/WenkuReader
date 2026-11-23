@@ -398,7 +398,10 @@ class PdfReaderSettingsAndSharedModelsTest {
             setOf(
                 PdfReaderTool.SCREEN_ORIENTATION.name,
                 PdfReaderTool.HIGHLIGHT_ALL.name,
-                PdfReaderTool.BRIGHTNESS.name
+                PdfReaderTool.BRIGHTNESS.name,
+                PdfReaderTool.DICTIONARY.name,
+                PdfReaderTool.SPLIT_VIEW.name,
+                PdfReaderTool.LOCK_PANNING.name
             ),
             defaultPdfHiddenTools()
         )

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,7 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -32,13 +35,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SharedAndroidUnifiedScaffold(
     section: MobileUnifiedLibrarySection,
-    showingShelf: Boolean,
+    showingShelf: Boolean = false,
     importDescription: String,
     addAudiobookDescription: String,
-    newShelfLabel: String,
+    newShelfLabel: String = "",
     onImport: () -> Unit,
     onAddAudiobook: () -> Unit,
-    onNewShelf: () -> Unit,
+    onNewShelf: (() -> Unit)? = null,
     topBar: @Composable () -> Unit,
     bottomBar: @Composable () -> Unit,
     sectionContent: @Composable (MobileUnifiedLibrarySection, PaddingValues) -> Unit,
@@ -48,7 +51,11 @@ fun SharedAndroidUnifiedScaffold(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier,
+    showImportLabel: Boolean = false,
+    homeFabPosition: FabPosition = FabPosition.End,
+    homeFloatingActions: (@Composable () -> Unit)? = null,
 ) {
+    val libraryStyle = LocalSharedLibrarySurfaceStyle.current
     Scaffold(
         modifier = modifier,
         // The top bar draws its own status-bar padding, so only the top inset is zeroed.
@@ -58,6 +65,7 @@ fun SharedAndroidUnifiedScaffold(
         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Bottom),
         bottomBar = bottomBar,
         topBar = topBar,
+        floatingActionButtonPosition = if (section == MobileUnifiedLibrarySection.HOME) homeFabPosition else FabPosition.End,
         floatingActionButton = if (showFloatingActionButton) {
             {
                 // The library's book grid is inset from the content edge, so on a foldable
@@ -66,13 +74,25 @@ fun SharedAndroidUnifiedScaffold(
                 val fabEndPadding = if (LocalSharedDeviceLayout.current.isDuoDevice) 12.dp else 0.dp
                 Box(Modifier.padding(end = fabEndPadding)) {
                     when (section) {
-                        MobileUnifiedLibrarySection.HOME -> FloatingActionButton(onClick = onImport, modifier = Modifier.testTag("UnifiedLibraryImport")) {
-                            Icon(Icons.Default.Add, importDescription)
+                        MobileUnifiedLibrarySection.HOME -> when {
+                            homeFloatingActions != null -> homeFloatingActions()
+                            showImportLabel -> ExtendedFloatingActionButton(
+                                onClick = onImport,
+                                modifier = Modifier.testTag("UnifiedLibraryImport").then(
+                                    libraryStyle?.let { Modifier.border(it.outline, it.shape) } ?: Modifier,
+                                ),
+                                shape = libraryStyle?.shape ?: FloatingActionButtonDefaults.extendedFabShape,
+                                icon = { Icon(Icons.Default.Add, null) },
+                                text = { Text(importDescription) },
+                            )
+                            else -> FloatingActionButton(onClick = onImport, modifier = Modifier.testTag("UnifiedLibraryImport")) {
+                                Icon(Icons.Default.Add, importDescription)
+                            }
                         }
                         MobileUnifiedLibrarySection.AUDIOBOOKS -> FloatingActionButton(onClick = onAddAudiobook, modifier = Modifier.testTag("UnifiedLibraryAddAudiobook")) {
                             Icon(Icons.Default.Add, addAudiobookDescription)
                         }
-                        MobileUnifiedLibrarySection.SHELVES -> if (!showingShelf) {
+                        MobileUnifiedLibrarySection.SHELVES -> if (!showingShelf && onNewShelf != null) {
                             ExtendedFloatingActionButton(
                                 onClick = onNewShelf,
                                 modifier = Modifier.testTag("UnifiedLibraryNewShelf"),

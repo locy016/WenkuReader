@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -34,9 +35,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
-import com.aryan.reader.shared.SharedLibraryEditor
-import com.aryan.reader.shared.ui.SharedAddToShelfDialog
 import com.aryan.reader.shared.ui.SharedMobileMainScaffold
+import com.aryan.reader.shared.ui.LocalSharedLibrarySurfaceStyle
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -53,7 +53,6 @@ fun MainScreen(
     }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    // Library Beta is the only main destination; the bottom navigation bar was removed.
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
         SharedMobileMainScaffold { innerPadding ->
             androidx.compose.foundation.layout.Box(
@@ -61,11 +60,13 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                UnifiedLibraryScreen(
-                    viewModel = viewModel,
-                    navController = navController,
-                    widthSizeClass = windowSizeClass.widthSizeClass
-                )
+                CompositionLocalProvider(LocalSharedLibrarySurfaceStyle provides librarySurfaceStyle()) {
+                    UnifiedLibraryScreen(
+                        viewModel = viewModel,
+                        navController = navController,
+                        widthSizeClass = windowSizeClass.widthSizeClass,
+                    )
+                }
             }
         }
 
@@ -82,22 +83,6 @@ fun MainScreen(
                 },
                 onDeleteTag = { tag -> viewModel.deleteTag(tag.id) },
                 onDismiss = viewModel::closeTagSelection
-            )
-        }
-        if (uiState.showAddSelectedToShelfDialogFor.isNotEmpty()) {
-            SharedAddToShelfDialog(
-                shelves = uiState.shelves
-                    .filter { shelf -> shelf.type == ShelfType.MANUAL && SharedLibraryEditor.canMutateShelf(shelf.id) }
-                    .map { shelf -> shelf.toSharedShelf { it.toSharedBookItem() } },
-                onDismiss = viewModel::closeAddSelectedToShelf,
-                onCreateShelf = {
-                    val selectedBookIds = uiState.showAddSelectedToShelfDialogFor
-                    viewModel.closeAddSelectedToShelf()
-                    viewModel.showCreateShelfDialogForSelectedBooks(selectedBookIds)
-                },
-                onShelvesSelected = { shelfIds ->
-                    viewModel.addSelectedBooksToShelves(shelfIds, uiState.showAddSelectedToShelfDialogFor)
-                }
             )
         }
     }

@@ -58,14 +58,18 @@ fun SharedAndroidHomeWidthClass.bookGridCells(): GridCells = when (this) {
  * math so both grid styles agree; compact always returns 3 to preserve the
  * existing phone layout.
  */
-fun SharedAndroidHomeWidthClass.bookGridColumns(availableWidth: Dp): Int {
+fun SharedAndroidHomeWidthClass.bookGridColumns(
+    availableWidth: Dp,
+    spacing: Dp = SharedMobileBookGridSpacing,
+    minimumColumns: Int = 3,
+): Int {
     if (this == SharedAndroidHomeWidthClass.COMPACT) return 3
     val minCell = if (this == SharedAndroidHomeWidthClass.MEDIUM) {
         SharedMobileMediumBookCellMin
     } else {
         SharedMobileExpandedBookCellMin
     }
-    return ((availableWidth + SharedMobileBookGridSpacing) / (minCell + SharedMobileBookGridSpacing))
+    return ((availableWidth + spacing) / (minCell + spacing))
         .toInt()
-        .coerceAtLeast(3)
+        .coerceAtLeast(minimumColumns)
 }

@@ -205,7 +205,8 @@ data class SharedSettingsSectionModel(
 
 data class SharedSettingsHubModel(
     val platform: SharedSettingsPlatform,
-    val sections: List<SharedSettingsSectionModel>
+    val sections: List<SharedSettingsSectionModel>,
+    val organizeByReadingTasks: Boolean = false,
 ) {
     val rootCategories: List<SharedSettingsCategoryModel>
         get() = buildRootCategories()
@@ -222,9 +223,10 @@ data class SharedSettingsHubModel(
             )
             SharedSettingsDestination.EPUB_TEXT -> categoryPage(
                 destination = destination,
-                title = "EPUB & Text",
-                summary = "Defaults for reflowable reading, layout, EPUB themes, and reader tools",
-                items = epubAndTextItems()
+                title = if (organizeByReadingTasks) "Reading and layout" else "EPUB & Text",
+                summary = if (organizeByReadingTasks) "Text, EPUB, PDF, page layout and reader tools"
+                    else "Defaults for reflowable reading, layout, EPUB themes, and reader tools",
+                items = epubAndTextItems() + if (organizeByReadingTasks) pdfAndComicItems() else emptyList()
             )
             SharedSettingsDestination.PDF_COMICS -> categoryPage(
                 destination = destination,
@@ -234,20 +236,20 @@ data class SharedSettingsHubModel(
             )
             SharedSettingsDestination.THEME_APPEARANCE -> categoryPage(
                 destination = destination,
-                title = "App Preferences",
+                title = if (organizeByReadingTasks) "Appearance" else "App Preferences",
                 summary = "App theme and general app behavior",
                 items = themeAndAppearanceItems()
             )
             SharedSettingsDestination.TTS_AI -> categoryPage(
                 destination = destination,
-                title = ttsAiTitle(),
-                summary = ttsAiSummary(),
+                title = if (organizeByReadingTasks) "Read aloud" else ttsAiTitle(),
+                summary = if (organizeByReadingTasks) "Voices, pronunciation and listening" else ttsAiSummary(),
                 items = ttsAndAiItems()
             )
             SharedSettingsDestination.LIBRARY_SYNC_STORAGE -> categoryPage(
                 destination = destination,
                 title = "Library & Files",
-                summary = "Recent files and local reading fonts",
+                summary = if (organizeByReadingTasks) "Local files, imports, and reading fonts" else "Recent files and local reading fonts",
                 items = libraryAndFileItems()
             )
             SharedSettingsDestination.SYNC_ACCOUNTS -> categoryPage(
@@ -264,8 +266,8 @@ data class SharedSettingsHubModel(
             )
             SharedSettingsDestination.EXTRA -> categoryPage(
                 destination = destination,
-                title = "Extra",
-                summary = "More-menu options, maintenance actions, and diagnostics",
+                title = if (organizeByReadingTasks) "Storage and maintenance" else "Extra",
+                summary = if (organizeByReadingTasks) "Generated caches and optional tools" else "More-menu options, maintenance actions, and diagnostics",
                 items = extraItems()
             )
             SharedSettingsDestination.HELP_ABOUT -> categoryPage(
@@ -319,12 +321,12 @@ data class SharedSettingsHubModel(
         }
     }
 
-    fun searchResults(query: String): List<SharedSettingsSearchResult> {
+    fun searchResults(query: String, localized: (String) -> String = { it }): List<SharedSettingsSearchResult> {
         val normalized = query.trim()
         if (normalized.isBlank()) return emptyList()
 
         val categoryResults = rootCategories
-            .filter { it.matches(normalized) }
+            .filter { it.matches(normalized) || localized(it.title).contains(normalized, true) || localized(it.summary).contains(normalized, true) }
             .map { category ->
                 SharedSettingsSearchResult(
                     title = category.title,
@@ -347,7 +349,7 @@ data class SharedSettingsHubModel(
         ).flatMap { destination ->
             val page = page(destination)
             page.items
-                .filter { it.matches(normalized) }
+                .filter { it.matches(normalized) || localized(it.title).contains(normalized, true) || localized(it.summary).contains(normalized, true) }
                 .map { item ->
                     SharedSettingsSearchResult(
                         title = item.title,
@@ -386,6 +388,20 @@ data class SharedSettingsHubModel(
     }
 
     private fun buildRootCategories(): List<SharedSettingsCategoryModel> {
+        if (organizeByReadingTasks) {
+            return listOf(
+                SharedSettingsDestination.EPUB_TEXT,
+                SharedSettingsDestination.THEME_APPEARANCE,
+                SharedSettingsDestination.LIBRARY_SYNC_STORAGE,
+                SharedSettingsDestination.TTS_AI,
+                SharedSettingsDestination.HELP_ABOUT,
+                SharedSettingsDestination.ACCOUNTS,
+                SharedSettingsDestination.SYNC_ACCOUNTS,
+            ).map { destination ->
+                val page = page(destination)
+                rootCategory(destination, page.title, page.summary, page.items.size)
+            }.filter { it.itemCount > 0 }
+        }
         return listOf(
             rootCategory(
                 destination = SharedSettingsDestination.EPUB_TEXT,
@@ -485,7 +501,7 @@ data class SharedSettingsHubModel(
             title = title,
             summary = summary,
             kind = SharedSettingsPageKind.CATEGORY,
-            parent = destination.parentDestination(),
+            parent = parentOf(destination),
             items = items
         )
     }
@@ -501,9 +517,21 @@ data class SharedSettingsHubModel(
             title = title,
             summary = summary,
             kind = SharedSettingsPageKind.DETAIL,
-            parent = destination.parentDestination(),
+            parent = parentOf(destination),
             localOverrideNote = localOverrideNote
         )
+    }
+
+    private fun parentOf(destination: SharedSettingsDestination): SharedSettingsDestination? {
+        if (organizeByReadingTasks) {
+            when (destination) {
+                SharedSettingsDestination.PDF_READER_TOOLS, SharedSettingsDestination.PDF_APPEARANCE_DEFAULTS ->
+                    return SharedSettingsDestination.EPUB_TEXT
+                SharedSettingsDestination.EXTRA -> return SharedSettingsDestination.HELP_ABOUT
+                else -> Unit
+            }
+        }
+        return destination.parentDestination()
     }
 
     private fun epubAndTextItems(): List<SharedSettingsItemModel> {
@@ -559,9 +587,9 @@ data class SharedSettingsHubModel(
     }
 
     private fun themeAndAppearanceItems(): List<SharedSettingsItemModel> {
-        return itemsForActions(
-            SharedSettingsAction.APP_THEME
-        )
+        return itemsForActions(SharedSettingsAction.APP_THEME) + if (organizeByReadingTasks) {
+            itemsForActions(SharedSettingsAction.LANGUAGE, SharedSettingsAction.SCREEN_CAPTURE_PROTECTION)
+        } else emptyList()
     }
 
     private fun ttsAndAiItems(): List<SharedSettingsItemModel> {
@@ -569,9 +597,9 @@ data class SharedSettingsHubModel(
             addAll(
                 itemsForActions(
                     SharedSettingsAction.TTS_SETTINGS,
-                    SharedSettingsAction.AI_SETTINGS
                 )
             )
+            if (!organizeByReadingTasks) baseItem(SharedSettingsAction.AI_SETTINGS)?.let(::add)
             baseItem(SharedSettingsAction.TTS_REPLACEMENTS)?.let { item ->
                 add(item.destinationRow(SharedSettingsDestination.GLOBAL_TTS_REPLACEMENTS))
             }
@@ -582,7 +610,12 @@ data class SharedSettingsHubModel(
         return itemsForActions(
             SharedSettingsAction.RECENT_LIMIT,
             SharedSettingsAction.CUSTOM_FONTS
-        )
+        ) + if (organizeByReadingTasks) itemsForActions(
+            SharedSettingsAction.EXTERNAL_FILE_BEHAVIOR,
+            SharedSettingsAction.STRICT_FILE_FILTER,
+            SharedSettingsAction.PDF_FILENAME_DISPLAY_NAME,
+            SharedSettingsAction.TABS_TOGGLE,
+        ) else emptyList()
     }
 
     private fun accountItems(): List<SharedSettingsItemModel> {
@@ -602,6 +635,13 @@ data class SharedSettingsHubModel(
     }
 
     private fun extraItems(): List<SharedSettingsItemModel> {
+        if (organizeByReadingTasks) return itemsForActions(
+            SharedSettingsAction.CLEAR_BOOK_CACHE,
+            SharedSettingsAction.CLEAR_REFLOW_CACHE,
+            SharedSettingsAction.AI_SETTINGS,
+            SharedSettingsAction.HIDE_READER_AI,
+            SharedSettingsAction.CLEAR_CLOUD_LOCAL_DATA,
+        )
         return itemsForActions(
             SharedSettingsAction.LANGUAGE,
             SharedSettingsAction.SCREEN_CAPTURE_PROTECTION,
@@ -622,10 +662,18 @@ data class SharedSettingsHubModel(
     }
 
     private fun helpAndAboutItems(): List<SharedSettingsItemModel> {
-        return itemsForActions(
+        val help = itemsForActions(
             SharedSettingsAction.HELP_FEEDBACK,
             SharedSettingsAction.SUPPORT,
             SharedSettingsAction.ABOUT
+        )
+        return if (!organizeByReadingTasks) help else help + listOfNotNull(
+            baseItem(SharedSettingsAction.CLEAR_BOOK_CACHE)?.copy(
+                title = "Storage and maintenance",
+                summary = "Generated caches and optional tools",
+                kind = SharedSettingsItemKind.NAVIGATION,
+                destination = SharedSettingsDestination.EXTRA,
+            )
         )
     }
 

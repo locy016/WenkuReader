@@ -140,7 +140,8 @@ class SuspendingAndroidBlockMeasurementProvider(
             headerStyle = textStyle.copy(fontWeight = FontWeight.Bold),
             density = density,
             imageSizeMultiplier = imageSizeMultiplier,
-            hideImages = hideImages
+            hideImages = hideImages,
+            limitOversizeParagraph = true,
         )
         measurementCache[cacheKey] = measured
         return measured
@@ -819,15 +820,46 @@ suspend fun paginate(
     blocks: List<ContentBlock>,
     pageHeight: Int,
     measurementProvider: BlockMeasurementProvider,
-    density: Density
+    density: Density,
+    onPageCommitted: (suspend (Page) -> Unit)? = null,
 ): List<Page> = paginateReaderBlocks(
     blocks = blocks,
     pageHeight = pageHeight,
     measurementProvider = measurementProvider,
     density = density,
     onCutoffDiagnostic = ::logAndroidEpubCutoff,
-    onPageGapDiagnostic = ::logAndroidEpubPageGapDiag
+    onPageGapDiagnostic = ::logAndroidEpubPageGapDiag,
+    onPageCommitted = onPageCommitted,
 )
+private fun TextMeasurer.measureParagraphForPage(
+    text: AnnotatedString,
+    style: TextStyle,
+    constraints: Constraints,
+    pageHeight: Int,
+): TextLayoutResult {
+    val probeStart = 4_096
+    val probeLimit = 8_192
+    if (pageHeight in 1 until Constraints.Infinity &&
+        text.length > probeLimit && style.textAlign != TextAlign.Justify
+    ) {
+        // A hard newline ends an independently shaped paragraph. If the next
+        // page break falls inside the probe, layout past that newline is irrelevant.
+        var end = probeStart
+        while (end < probeLimit && text[end] != '\n') end++
+        if (end < probeLimit) {
+            val probe = measure(
+                text = text.subSequence(0, end + 1).withoutForegroundColorSpans(),
+                style = style,
+                constraints = constraints,
+            )
+            if (probe.lineCount > 1 && probe.getLineTop(probe.lineCount - 1) > pageHeight) {
+                return probe
+            }
+        }
+    }
+    return measure(text = text.withoutForegroundColorSpans(), style = style, constraints = constraints)
+}
+
 private suspend fun measureBlockHeight(
     block: ContentBlock,
     textMeasurer: TextMeasurer,
@@ -837,7 +869,8 @@ private suspend fun measureBlockHeight(
     density: Density,
     imageSizeMultiplier: Float = 1.0f,
     hideImages: Boolean = false,
-    includeCenteredTextSafetyPadding: Boolean = true
+    includeCenteredTextSafetyPadding: Boolean = true,
+    limitOversizeParagraph: Boolean = false,
 ): Int {
     coroutineContext.ensureActive()
     val boxMetrics = computeBlockBoxMetrics(block, constraints, density)
@@ -849,10 +882,11 @@ private suspend fun measureBlockHeight(
         is ParagraphBlock -> {
             val paragraphStyle = defaultStyle.copy(textAlign = block.textAlign ?: defaultStyle.textAlign)
             val height = withContext(Dispatchers.Main) {
-                textMeasurer.measure(
-                    text = block.content.withoutForegroundColorSpans(),
+                textMeasurer.measureParagraphForPage(
+                    text = block.content,
                     style = paragraphStyle,
-                    constraints = adjustedConstraints
+                    constraints = adjustedConstraints,
+                    pageHeight = if (limitOversizeParagraph) constraints.maxHeight else Constraints.Infinity,
                 ).paginationMeasuredHeightPx()
             }
             height + centeredTextSafetyPaddingPx(paragraphStyle, density, includeCenteredTextSafetyPadding)
@@ -1938,10 +1972,11 @@ private suspend fun splitParagraphBlock(
     }
 
     val layoutResult = withContext(Dispatchers.Main) {
-        textMeasurer.measure(
-            text = text.withoutForegroundColorSpans(),
+        textMeasurer.measureParagraphForPage(
+            text = text,
             style = paragraphStyle,
-            constraints = paragraphConstraints
+            constraints = paragraphConstraints,
+            pageHeight = availableTextHeight,
         )
     }
 
@@ -1982,7 +2017,8 @@ private suspend fun splitParagraphBlock(
             textMeasurer.measure(
                 text = part2CheckText.withoutForegroundColorSpans(),
                 style = paragraphStyle,
-                constraints = paragraphConstraints
+                constraints = paragraphConstraints,
+                maxLines = widowLines,
             )
         }
         coroutineContext.ensureActive()

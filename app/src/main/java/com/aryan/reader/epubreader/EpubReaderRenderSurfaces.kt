@@ -49,6 +49,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -536,6 +538,9 @@ internal fun EpubReaderRenderSurfaces(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .widthIn(max = 680.dp)
+                                .fillMaxWidth()
                                 .padding(top = contentTopPadding)
                                 .padding(bottom = contentBottomPadding)
                                 .testTag("ReaderContainer")
@@ -1841,6 +1846,9 @@ internal fun EpubReaderRenderSurfaces(
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .widthIn(max = if (prefs.pageSpreadMode == ReaderPageSpreadMode.TWO_PAGE) 1200.dp else 680.dp)
+                                .fillMaxWidth()
                                 .padding(top = contentTopPadding)
                                 .padding(bottom = contentBottomPadding)
                                 .testTag("ReaderContainer")
@@ -1876,6 +1884,8 @@ internal fun EpubReaderRenderSurfaces(
                                 activeTextureId = activeTextureId,
                                 activeTextureAlpha = activeTextureAlpha,
                                 initialChapterIndexInBook = lastKnownLocator?.chapterIndex,
+                                showOpeningSpreadEarly = lastKnownLocator == null &&
+                                    !navigation.isPaginatedReconfigurationRestoring,
                                 fallbackLocatorForReconfiguration = navigation.paginatedReconfigurationAnchor ?: lastKnownLocator,
                                 explicitNavigationAnchor = paginatedExplicitNavigationAnchor,
                                 explicitNavigationEpoch = paginatedExplicitNavigationEpoch,

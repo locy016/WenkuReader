@@ -66,7 +66,8 @@ data class RecentFileItem(
     val folderTextMetadataParsed: Boolean = false,
     val folderCoverMetadataParsed: Boolean = false,
     val readingPositionModifiedTimestamp: Long = 0L,
-    val tags: List<TagEntity> = emptyList()
+    val tags: List<TagEntity> = emptyList(),
+    val libraryCategoryId: String? = null,
 )
 
 fun RecentFileItem.hasReadingPositionForSync(): Boolean {

@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -103,6 +104,15 @@ fun shouldSyncSelectedFileRoute(currentRoute: String?): Boolean {
     return currentRoute == null ||
         SharedMobileAppDestination.fromRoute(currentRoute)?.participatesInSelectedFileSync == true
 }
+
+private const val LibraryExitFadeDuration = 90
+
+private fun readerEntranceFromLibrary() = fadeIn(
+    tween(
+        durationMillis = BookOpeningDuration - LibraryExitFadeDuration,
+        delayMillis = LibraryExitFadeDuration,
+    ),
+)
 
 private fun NavHostController.isReadyForBackStackChange(): Boolean {
     return currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED
@@ -238,6 +248,10 @@ fun AppNavigation(
     }
     val currentDestination = SharedMobileAppDestination.fromRoute(currentRoute)
     val isOnReaderRoute = currentDestination?.isReader == true
+    val bookOpening = remember { LibraryBookOpening() }
+    val openingSource = bookOpening.source
+    val openingFromLibrary = !uiState.isTemporaryExternalOpen &&
+        openingSource?.canAnimate(uiState.selectedBookId) == true
     val ttsMiniBarState = remember(ttsState) { ttsState.toSharedReaderTtsMiniBarState() }
     val showTtsMiniBar = shouldShowSharedReaderTtsMiniBar(
         state = ttsMiniBarState,
@@ -253,6 +267,15 @@ fun AppNavigation(
     )
     val shouldHandleReaderBack = shouldInterceptBack ||
         (currentDestination == SharedMobileAppDestination.PDF_VIEWER && uiState.pdfSplitWorkspace.isOpen)
+
+    LaunchedEffect(openingSource, currentDestination, uiState.errorMessage, openingFromLibrary) {
+        if (openingSource == null) return@LaunchedEffect
+        when {
+            uiState.errorMessage != null -> bookOpening.clear(openingSource)
+            currentDestination == SharedMobileAppDestination.MAIN -> bookOpening.expire(openingSource)
+            !isOnReaderRoute || !openingFromLibrary -> bookOpening.clear(openingSource)
+        }
+    }
 
     LaunchedEffect(currentRoute, uiState.selectedFileType, uiState.isLoading, uiState.selectedEpubBook, uiState.selectedPdfUri) {
         if (!uiState.isLoading && shouldSyncSelectedFileRoute(currentRoute)) {
@@ -296,8 +319,16 @@ fun AppNavigation(
             }
         }
 
+        CompositionLocalProvider(LocalLibraryBookOpening provides bookOpening) {
         NavHost(navController = navController, startDestination = SharedMobileAppDestination.MAIN.route) {
-        composable(SharedMobileAppDestination.MAIN.route) {
+        composable(
+            route = SharedMobileAppDestination.MAIN.route,
+            exitTransition = {
+                if (SharedMobileAppDestination.fromRoute(targetState.destination.route)?.isReader == true) {
+                    fadeOut(tween(LibraryExitFadeDuration))
+                } else null
+            },
+        ) {
             Timber.d("Navigating to Main Screen (${SharedMobileAppDestination.MAIN.route}).")
             if (uiState.isTemporaryExternalOpen) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -313,7 +344,14 @@ fun AppNavigation(
         }
 
         // PDF Viewer Screen Composable
-        composable(route = SharedMobileAppDestination.PDF_VIEWER.route) {
+        composable(
+            route = SharedMobileAppDestination.PDF_VIEWER.route,
+            enterTransition = {
+                if (initialState.destination.route == SharedMobileAppDestination.MAIN.route) {
+                    readerEntranceFromLibrary()
+                } else null
+            },
+        ) {
             Timber.d("Navigating to PDF Viewer Screen (${SharedMobileAppDestination.PDF_VIEWER.route}).")
             val pdfUri = uiState.selectedPdfUri
             val initialPage = uiState.initialPageInBook
@@ -461,7 +499,14 @@ fun AppNavigation(
         }
 
         // EPUB Reader Screen Composable
-        composable(route = SharedMobileAppDestination.EPUB_READER.route) {
+        composable(
+            route = SharedMobileAppDestination.EPUB_READER.route,
+            enterTransition = {
+                if (initialState.destination.route == SharedMobileAppDestination.MAIN.route) {
+                    readerEntranceFromLibrary()
+                } else null
+            },
+        ) {
             Timber.d("Navigating to EPUB Reader Screen (${SharedMobileAppDestination.EPUB_READER.route}).")
             val epubBook = uiState.selectedEpubBook
             val isLoading = uiState.isLoading
@@ -492,10 +537,10 @@ fun AppNavigation(
                                 Timber.d("Back action from EPUB Reader. Clearing selected file to navigate home.")
                                 viewModel.clearSelectedFile()
                             },
-                            onSavePosition = { locator, cfiForWebView, progress ->
+                            onSavePosition = { locator, cfiForWebView, progress, chapterLabel ->
                                 Timber.d("Auto-saving EPUB position: Locator $locator, Progress $progress%")
                                 epubUri?.let { uri ->
-                                    viewModel.saveEpubReadingPosition(uri, locator, cfiForWebView, progress)
+                                    viewModel.saveEpubReadingPosition(uri, locator, cfiForWebView, progress, chapterLabel)
                                 }
                             },
                             onBookmarksChanged = { bookmarksJson ->
@@ -613,6 +658,12 @@ fun AppNavigation(
                 }
             }
         }
+        }
+
+        }
+
+        if (isOnReaderRoute && openingFromLibrary && openingSource != null) {
+            LibraryBookOpeningOverlay(openingSource) { bookOpening.clear(openingSource) }
         }
 
         // TTS-audiobook notification taps are application-scoped.  Keeping

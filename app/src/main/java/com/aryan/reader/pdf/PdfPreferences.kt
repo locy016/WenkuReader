@@ -59,7 +59,7 @@ internal const val PDF_PAGE_SPREAD_MODE_KEY = "pdf_page_spread_mode"
 internal const val PDF_FIRST_PAGE_STANDALONE_IN_SPREAD_KEY = "pdf_first_page_standalone_in_spread"
 internal const val PDF_LAYOUT_DEBUG_TAG = "PdfLayoutDebug"
 private const val PDF_HIDDEN_TOOLS_DEFAULTS_VERSION_KEY = "pdf_hidden_tools_defaults_version"
-private const val PDF_HIDDEN_TOOLS_DEFAULTS_VERSION = 3
+private const val PDF_HIDDEN_TOOLS_DEFAULTS_VERSION = 4
 
 typealias PdfReaderTool = com.aryan.reader.shared.PdfReaderTool
 
@@ -101,7 +101,10 @@ internal fun defaultPdfHiddenTools(): Set<String> {
     return setOf(
         PdfReaderTool.SCREEN_ORIENTATION.name,
         PdfReaderTool.HIGHLIGHT_ALL.name,
-        PdfReaderTool.BRIGHTNESS.name
+        PdfReaderTool.BRIGHTNESS.name,
+        PdfReaderTool.DICTIONARY.name,
+        PdfReaderTool.SPLIT_VIEW.name,
+        PdfReaderTool.LOCK_PANNING.name
     )
 }
 
@@ -179,7 +182,9 @@ internal fun loadPdfHiddenTools(context: Context): Set<String> {
     val savedHiddenTools = sanitizePdfHiddenToolNames(prefs.getStringSet(PDF_HIDDEN_TOOLS_KEY, emptySet()).orEmpty())
     val defaultsVersion = prefs.getInt(PDF_HIDDEN_TOOLS_DEFAULTS_VERSION_KEY, 0)
     if (defaultsVersion < PDF_HIDDEN_TOOLS_DEFAULTS_VERSION) {
-        val migratedHiddenTools = sanitizePdfHiddenToolNames(savedHiddenTools + pdfHiddenToolsIntroducedAfter(defaultsVersion))
+        val previousDefaults = pdfHiddenToolsIntroducedAfter(0)
+        val migrated = savedHiddenTools + pdfHiddenToolsIntroducedAfter(defaultsVersion)
+        val migratedHiddenTools = sanitizePdfHiddenToolNames(if (migrated == previousDefaults) defaultPdfHiddenTools() else migrated)
         prefs.edit {
             putStringSet(PDF_HIDDEN_TOOLS_KEY, migratedHiddenTools)
             putInt(PDF_HIDDEN_TOOLS_DEFAULTS_VERSION_KEY, PDF_HIDDEN_TOOLS_DEFAULTS_VERSION)

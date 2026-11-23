@@ -7,7 +7,6 @@
  * Live callers, for anyone re-homing these:
  * - `UnifiedLibrarySections` — `FolderSyncScreen`, `LibraryListItem`
  * - `UnifiedLibraryScreen` — `LibraryFilterSheet`, `OpdsTab`
- * - `UnifiedLibraryShelfCrud` — `LibraryListItem`
  *
  * Splitting this into per-concern files is mechanical and safe, but it is pure relocation with no
  * behavior change, so it is deliberately not done here: renaming churn is not worth a diff's worth
@@ -16,8 +15,6 @@
 
 package com.aryan.reader
 
-import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,12 +39,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -56,17 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.ImageLoader
-import coil.compose.AsyncImage
-import coil.decode.SvgDecoder
 import com.aryan.reader.data.RecentFileItem
 import com.aryan.reader.data.TagEntity
-import com.aryan.reader.opds.OpdsCatalog
-import com.aryan.reader.opds.OpdsEntry
-import com.aryan.reader.opds.OpdsRepository
-import com.aryan.reader.opds.OpdsViewModel
 import com.aryan.reader.shared.CloudFolderSyncSelection
 import com.aryan.reader.shared.LOCAL_FOLDER_SYNC_DATA_DIR
 import com.aryan.reader.shared.Tag
@@ -79,6 +67,9 @@ import com.aryan.reader.shared.ui.SharedMobileLibraryFilterLabels
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun LibraryListItem(
@@ -89,11 +80,18 @@ internal fun LibraryListItem(
     onItemLongClick: () -> Unit,
     isDownloading: Boolean,
     usePdfFileNameAsDisplayName: Boolean = false,
+    animateOpening: Boolean = false,
 ) {
+    val coverTap = rememberLibraryCoverTap(item, animateOpening)
+    val progress = (item.progressPercentage?.takeIf(Float::isFinite) ?: 0f).coerceIn(0f, 100f)
     SharedMobileLibraryBookListCardFrame(
         isAvailable = item.isAvailable,
         isSelected = isSelected,
-        onClick = onItemClick,
+        compact = true,
+        onClick = {
+            coverTap?.record(item)
+            onItemClick()
+        },
         onLongClick = onItemLongClick,
         modifier = Modifier.testTag("LibraryBookItem_${item.bookId}"),
         cover = {
@@ -101,7 +99,7 @@ internal fun LibraryListItem(
                 item = item,
                 contentDescription = item.displayName,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().recordLibraryCover(coverTap),
             )
             if (isSelected) {
                 Box(
@@ -128,26 +126,26 @@ internal fun LibraryListItem(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
-                    minLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 20.sp,
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = item.cardAuthor(),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    minLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                item.cardAuthor().takeIf(String::isNotBlank)?.let { author ->
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = author,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (item.sourceFolderUri != null || item.isOpdsStream() || isPinned) {
                 FileStatusBadges(item = item, isPinned = isPinned)
             }
         },
         metadata = {
-            FileTypeBadge(type = item.type, overlay = false)
+            FileTypeBadge(type = item.type, compact = true)
             if (item.tags.isNotEmpty()) {
                 BookTagChipsRow(
                     tags = item.tags,
@@ -197,13 +195,22 @@ internal fun LibraryListItem(
                     }
                 }
             }
+            if (progress > 0f) {
+                Text(
+                    "${progress.roundToInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         },
         progress = {
-            ReadingProgressSection(
-                progressPercentage = item.progressPercentage,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (progress > 0f) {
+                LinearProgressIndicator(
+                    progress = { progress / 100f },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                )
+            }
         },
     )
 }
@@ -218,6 +225,8 @@ internal fun FolderSyncScreen(
     onEditFolderFiltersClick: (SyncedFolder, Set<FileType>) -> Unit,
     onScanNowClick: () -> Unit,
     onSyncMetadataClick: () -> Unit,
+    onUpdateFolderReadingData: (SyncedFolder) -> Unit,
+    onReconnectFolder: (SyncedFolder) -> Unit,
     isLoading: Boolean,
     cloudFolderSelection: CloudFolderSyncSelection? = null,
     cloudSyncEnabled: Boolean = false,
@@ -226,6 +235,14 @@ internal fun FolderSyncScreen(
     onIncomingCloudFolderClick: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val authorizedFolderUris by produceState<Set<String>?>(null, context, syncedFolders, isLoading) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.persistedUriPermissions
+                    .filter { it.isReadPermission }.mapTo(mutableSetOf()) { it.uri.toString() }
+            }.getOrNull()
+        }
+    }
     val dateFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
     val folderStatsByUri = remember(allRecentFiles) {
         allRecentFiles.asSequence()
@@ -248,7 +265,7 @@ internal fun FolderSyncScreen(
             addDescription = stringResource(R.string.action_add),
             scanning = stringResource(R.string.scanning),
             scanAll = stringResource(R.string.scan_all),
-            syncMetadata = stringResource(R.string.sync_meta),
+            syncMetadata = stringResource(R.string.wenku_folder_update_data),
             emptyTitle = stringResource(R.string.sync_local_folders),
             emptyMessage = stringResource(R.string.sync_folders_desc),
             selectFolder = stringResource(R.string.action_select_folder),
@@ -277,6 +294,8 @@ internal fun FolderSyncScreen(
             cloudDownloaded = stringResource(R.string.folder_sync_cloud_downloaded),
             cloudAvailable = stringResource(R.string.folder_sync_cloud_available),
             cloudChooseAction = stringResource(R.string.folder_sync_cloud_choose_action),
+            permissionMissing = stringResource(R.string.wenku_folder_permission_missing),
+            reconnect = stringResource(R.string.wenku_folder_reconnect),
         ),
         onAddFolder = onAddFolderClick,
         onRemoveFolder = onRemoveFolderClick,
@@ -284,6 +303,9 @@ internal fun FolderSyncScreen(
         onFileTypesChange = onEditFolderFiltersClick,
         onScanAll = onScanNowClick,
         onSyncMetadata = onSyncMetadataClick,
+        onFolderMetadata = onUpdateFolderReadingData,
+        onReconnectFolder = onReconnectFolder,
+        authorizedFolderUris = authorizedFolderUris,
         formatLastScan = { dateFormat.format(Date(it)) },
         syncIcon = { Icon(painterResource(R.drawable.sync), null, Modifier.size(18.dp)) },
         cloudFolderSelection = cloudFolderSelection,
@@ -323,94 +345,4 @@ fun LibraryFilterSheet(
         onApply = onApply,
         onDismiss = onDismiss,
     )
-}
-
-@Composable
-fun OpdsTab(
-    localLibraryFiles: List<RecentFileItem>,
-    onBookDownloaded: (Uri, String) -> Unit,
-    onReadBook: (RecentFileItem) -> Unit,
-    onStreamBook: (OpdsEntry, OpdsCatalog?) -> Unit,
-    onDeleteCatalogStreams: (String) -> Unit,
-    onShowBanner: (String) -> Unit,
-    syncedFolders: List<SyncedFolder>,
-    opdsViewModel: OpdsViewModel = viewModel()
-) {
-    val uiState by opdsViewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val coverImageLoader = rememberOpdsCoverImageLoader(uiState.currentCatalog)
-    val sharedLibraryBooks = remember(localLibraryFiles) {
-        localLibraryFiles.map(RecentFileItem::toSharedBookItem)
-    }
-
-    BackHandler(enabled = uiState.isViewingCatalog) {
-        opdsViewModel.navigateBack()
-    }
-
-    com.aryan.reader.shared.ui.SharedOpdsScreen(
-        state = uiState,
-        localLibraryBooks = sharedLibraryBooks,
-        onOpenCatalog = opdsViewModel::openCatalog,
-        onOpenFeedUrl = opdsViewModel::openFeedUrl,
-        onNavigateBack = opdsViewModel::navigateBack,
-        onSearch = opdsViewModel::search,
-        onLoadNextPage = opdsViewModel::loadNextPage,
-        onAddCatalog = opdsViewModel::addCatalog,
-        onUpdateCatalog = opdsViewModel::updateCatalog,
-        onRemoveCatalog = { opdsViewModel.removeCatalog(it.id) },
-        onDeleteCatalogStreams = onDeleteCatalogStreams,
-        onDownloadBook = { entry, acquisition ->
-            opdsViewModel.downloadBook(
-                entry, acquisition, context,
-                onDownloaded = { downloadedUri ->
-                    onBookDownloaded(downloadedUri, entry.title)
-                },
-                onDownloadedToFolder = { folderName ->
-                    onShowBanner(context.getString(R.string.banner_downloaded_to_folder, entry.title, folderName))
-                }
-            )
-        },
-        onDownloadLocationChange = opdsViewModel::setDownloadLocation,
-        syncedFolders = syncedFolders,
-        onReadBook = { sharedBook ->
-            localLibraryFiles.firstOrNull { it.bookId == sharedBook.id }?.let(onReadBook)
-        },
-        onStreamBook = onStreamBook,
-        onClearError = opdsViewModel::clearError,
-        coverContent = { entry, modifier ->
-            AsyncImage(
-                model = entry.coverUrl,
-                contentDescription = null,
-                imageLoader = coverImageLoader,
-                contentScale = ContentScale.Crop,
-                modifier = modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
-        },
-        mobileLayout = true,
-    )
-}
-
-@Composable
-private fun rememberOpdsCoverImageLoader(catalog: OpdsCatalog?): ImageLoader {
-    val context = LocalContext.current.applicationContext
-    val username = catalog?.username
-    val password = catalog?.password
-    val imageLoader = remember(context, username, password) {
-        ImageLoader.Builder(context)
-            .okHttpClient {
-                OpdsRepository.sharedHttpClient.newBuilder()
-                    .authenticator(OpdsRepository.OpdsAuthenticator(username, password))
-                    .build()
-            }
-            .components {
-                add(SvgDecoder.Factory())
-            }
-            .build()
-    }
-    DisposableEffect(imageLoader) {
-        onDispose { imageLoader.shutdown() }
-    }
-    return imageLoader
 }

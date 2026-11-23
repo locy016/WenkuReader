@@ -276,7 +276,9 @@ fun <T> SharedMobileEpubToc(
     collapseDescription: String,
     expandDescription: String,
     scrollbar: @Composable BoxScope.(LazyListState) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    locateCurrentOnOpen: Boolean = false,
+    showTreeActionsForFlatContents: Boolean = true,
 ) {
     if (entries.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
@@ -288,9 +290,8 @@ fun <T> SharedMobileEpubToc(
     var searchFieldCanFocus by remember { mutableStateOf(false) }
     // Android benchmark: expanding *every* index (not just structural parents) is what
     // "Expand All" means in the Android drawer.
-    var expandedEntryIndices by rememberSaveable(entries) {
-        mutableStateOf(readerTocParentIndices(entries, depthOf))
-    }
+    val parentIndices = remember(entries) { readerTocParentIndices(entries, depthOf) }
+    var expandedEntryIndices by rememberSaveable(entries) { mutableStateOf(parentIndices) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val activeOriginalIndex = activeIndex?.takeIf { it in entries.indices }
@@ -305,8 +306,15 @@ fun <T> SharedMobileEpubToc(
         )
     }
     val isSearching = query.isNotBlank()
+    LaunchedEffect(locateCurrentOnOpen, entries, activeOriginalIndex) {
+        if (locateCurrentOnOpen && query.isBlank()) {
+            val plan = readerTocLocatePlan(entries, expandedEntryIndices, activeOriginalIndex, depthOf)
+            expandedEntryIndices = plan.expandedEntryIndices
+            plan.visibleIndex?.let { listState.requestScrollToItem((it - 2).coerceAtLeast(0)) }
+        }
+    }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -353,11 +361,13 @@ fun <T> SharedMobileEpubToc(
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            TextButton(onClick = { expandedEntryIndices = entries.indices.toSet() }) {
-                Text(readerString("action_expand_all", "Expand All"))
-            }
-            TextButton(onClick = { expandedEntryIndices = emptySet() }) {
-                Text(readerString("action_collapse_all", "Collapse All"))
+            if (showTreeActionsForFlatContents || parentIndices.isNotEmpty()) {
+                TextButton(onClick = { expandedEntryIndices = parentIndices }) {
+                    Text(readerString("action_expand_all", "Expand All"))
+                }
+                TextButton(onClick = { expandedEntryIndices = emptySet() }) {
+                    Text(readerString("action_collapse_all", "Collapse All"))
+                }
             }
             TextButton(
                 onClick = {

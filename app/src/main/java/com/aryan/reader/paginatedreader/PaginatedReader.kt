@@ -185,7 +185,8 @@ fun PaginatedReaderScreen(
     activeHighlightPalette: List<Int>,
     onUpdatePalette: (Int, Int) -> Unit,
     activeTextureId: String? = null,
-    activeTextureAlpha: Float = 0.55f
+    activeTextureAlpha: Float = 0.55f,
+    showOpeningSpreadEarly: Boolean = false,
 ) {
     LaunchedEffect(userHighlights) {
         Timber.d("PaginatedReaderScreen: Received ${userHighlights.size} highlights.")
@@ -532,7 +533,14 @@ fun PaginatedReaderScreen(
                 hideImages = debouncedHideImages,
                 verticalMarginMultiplier = debouncedVerticalMarginMult,
                 bookReplacementPreferences = debouncedBookReplacementPreferences,
-                bookReplacementFileId = debouncedBookReplacementFileId
+                bookReplacementFileId = debouncedBookReplacementFileId,
+                openingSpreadPageCount = if (
+                    showOpeningSpreadEarly && effectiveInitialChapter == 0 && currentPaginatorRef.value == null
+                ) {
+                    if (isTwoPageSpread) 2 else 1
+                } else {
+                    0
+                },
             )
         }
 

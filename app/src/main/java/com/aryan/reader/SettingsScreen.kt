@@ -3,10 +3,20 @@ package com.aryan.reader
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.ListItem
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
@@ -81,7 +92,6 @@ import com.aryan.reader.shared.MobileSettingsMutationState
 import com.aryan.reader.shared.MobileStrictFileFilterEffect
 import com.aryan.reader.shared.planMobileSettingsMutation
 import com.aryan.reader.shared.SharedSettingsDestination
-import com.aryan.reader.shared.parentDestination
 import com.aryan.reader.shared.toReaderSettingsFontFamily
 import com.aryan.reader.shared.toSharedReaderTextAlign
 import com.aryan.reader.shared.reader.ReaderReadingMode
@@ -93,7 +103,6 @@ import com.aryan.reader.shared.sharedSettingsHubModel
 import com.aryan.reader.shared.toReaderSettings
 import com.aryan.reader.shared.ui.SharedSettingsHub
 import com.aryan.reader.shared.ui.LocalSharedStringResolver
-import com.aryan.reader.shared.ui.SharedStringResolver
 import com.aryan.reader.tts.isReaderTtsVoiceChangeLocked
 import com.aryan.reader.tts.loadTtsMode
 import kotlinx.coroutines.launch
@@ -145,6 +154,20 @@ private fun androidSettingsLiteralResource(context: Context, literal: String): I
     "Format, EPUB theme, visual defaults, and reader tools" -> R.string.settings_hub_literal_43
     "Separate PDF theme and fixed-layout reader defaults" -> R.string.settings_hub_literal_44
     "More-menu options, maintenance, diagnostics, and app info" -> R.string.settings_hub_literal_45
+    "More-menu options, maintenance, and diagnostics" -> R.string.settings_hub_literal_45
+    "TTS & AI" -> R.string.wenku_listening_tools
+    "Read aloud" -> R.string.wenku_reader_listen
+    "Voices, pronunciation and listening" -> R.string.wenku_read_aloud_summary
+    "Reading and layout" -> R.string.wenku_reading_and_layout
+    "Text, EPUB, PDF, page layout and reader tools" -> R.string.wenku_reading_and_layout_summary
+    "Appearance" -> R.string.wenku_appearance
+    "Local files, imports, and reading fonts" -> R.string.wenku_local_files_summary
+    "Storage and maintenance" -> R.string.wenku_storage_maintenance
+    "Generated caches and optional tools" -> R.string.wenku_storage_maintenance_summary
+    "Global voice, speech replacements, keys, and reader AI" -> R.string.wenku_listening_settings_summary
+    "Global voice, speech behavior, and TTS replacements" -> R.string.wenku_listening_settings_summary
+    "Language" -> R.string.wenku_app_language
+    "Choose the app language" -> R.string.wenku_app_language_summary
     "Format defaults" -> R.string.settings_hub_literal_46
     "Font, size, line spacing, margins, alignment, and reading mode" -> R.string.settings_hub_literal_47
     "Theme and texture" -> R.string.settings_hub_literal_48
@@ -247,6 +270,8 @@ fun SettingsScreen(
     val ttsState by viewModel.ttsController.ttsState.collectAsStateWithLifecycle()
 
     var query by remember { mutableStateOf("") }
+    val removedBooks by viewModel.removedLibraryBooks.collectAsStateWithLifecycle(initialValue = emptyList())
+    var showRemovedBooks by remember { mutableStateOf(false) }
     var settingsDestination by remember { mutableStateOf(SharedSettingsDestination.ROOT) }
     var showAppThemePanel by remember { mutableStateOf(false) }
     var showBehaviorDialog by remember { mutableStateOf(false) }
@@ -262,9 +287,6 @@ fun SettingsScreen(
     var showRecentLimitDialog by remember { mutableStateOf(false) }
     var showTtsSettingsSheet by remember { mutableStateOf(false) }
     var hideReaderAi by remember { mutableStateOf(loadHideReaderAiFeatures(context)) }
-    // Home > More owned the FPS toggle before that screen was retired; the store is
-    // process-wide so Settings reads it to render the same switch state.
-    val fpsOverlayEnabled = rememberDebugFpsEnabled()
     var epubReaderDefaults by remember(context, uiState.renderMode) {
         mutableStateOf(loadAndroidEpubReaderDefaultSettings(context, uiState.renderMode))
     }
@@ -330,14 +352,13 @@ fun SettingsScreen(
 
     // Model build allocates section/item lists; remember on its real inputs
     // so unrelated uiState emissions (progress, sync ticks) skip it.
-    val settingsModel = remember(uiState, hideReaderAi, fpsOverlayEnabled) {
+    val settingsModel = remember(uiState, hideReaderAi) {
         sharedSettingsHubModel(
             androidSettingsHubInput(
                 uiState = uiState,
                 hideReaderAi = hideReaderAi,
-                fpsOverlayEnabled = fpsOverlayEnabled,
             )
-        )
+        ).copy(organizeByReadingTasks = true)
     }
     val settingsPage = remember(settingsModel, settingsDestination) {
         settingsModel.page(settingsDestination)
@@ -368,7 +389,7 @@ fun SettingsScreen(
             query = ""
             return
         }
-        val parent = settingsDestination.parentDestination()
+        val parent = settingsPage.parent
         if (parent != null) {
             settingsDestination = parent
         } else {
@@ -397,152 +418,207 @@ fun SettingsScreen(
         contentWindowInsets = WindowInsets.navigationBars
     ) { padding ->
         CompositionLocalProvider(
-            LocalSharedStringResolver provides SharedStringResolver(
-                resolveLiteral = { literal ->
-                    androidSettingsLiteralResource(context, literal)?.let(context::getString)
-                }
-            )
+            LocalSharedStringResolver provides androidSharedStringResolver(context) { literal ->
+                androidSettingsLiteralResource(context, literal)?.let(context::getString)
+            }
         ) {
-            SharedSettingsHub(
-            model = settingsModel,
-            query = query,
-            onQueryChange = { query = it },
-            readerDefaultSettings = epubReaderDefaults,
-            onReaderDefaultSettingsChange = { settings ->
-                epubReaderDefaults = settings
-                saveAndroidEpubReaderDefaultSettings(context, settings)
-                viewModel.setRenderMode(settings.toAndroidRenderMode())
-            },
-            pdfReaderDefaultSettings = pdfReaderDefaults,
-            onPdfReaderDefaultSettingsChange = { settings ->
-                pdfReaderDefaults = settings
-                saveAndroidPdfReaderDefaultSettings(context, settings)
-            },
-            ttsReplacementPreferences = ttsReplacementPreferences,
-            onTtsReplacementPreferencesChange = { preferences ->
-                ttsReplacementPreferences = preferences
-                saveTtsReplacementPreferences(context, preferences)
-            },
-            customFonts = sharedFonts,
-            // The shared control applies a *synchronously returned* path, but a picker sheet is
-            // asynchronous. So this only requests the sheet and returns blank to opt out of the
-            // shared write-back; the chosen font is applied below from the sheet's own callback.
-            onPickCustomFont = if (showFontSelectionSheet) null else {
-                { showFontSelectionSheet = true; "" }
-            },
-            customReaderThemes = customThemes,
-            onCustomReaderThemesChange = { themes ->
-                customThemes = themes
-                saveCustomThemes(context, themes)
-            },
-            readerCustomTextureIds = importedTextureIds,
-            onImportReaderTexture = { current ->
-                texturePickerLauncher.launch(arrayOf("image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"))
-                current
-            },
-            showTopBar = false,
-            destination = settingsDestination,
-            onDestinationChange = { settingsDestination = it },
-            contentPadding = padding,
-            modifier = Modifier.fillMaxSize(),
-            onAction = { action ->
-                // Folder sync is a secondary settings surface now.  Do not
-                // toggle the legacy local-indexing switch merely by opening
-                // the cloud-folder selection dialog.
-                val portableMutation = if (action == SharedSettingsAction.FOLDER_SYNC) {
-                    null
-                } else {
-                    planMobileSettingsMutation(
-                        action = action,
-                        state = MobileSettingsMutationState(
-                            tabsEnabled = uiState.isTabsEnabled,
-                            strictFileFilterEnabled = uiState.useStrictFileFilter,
-                            pdfFileNameAsDisplayName = uiState.usePdfFileNameAsDisplayName,
-                            folderSyncEnabled = uiState.isFolderSyncEnabled,
-                            hideReaderAi = hideReaderAi,
-                        ),
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                if (settingsDestination == SharedSettingsDestination.LIBRARY_SYNC_STORAGE && query.isBlank()) {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.wenku_local_folders)) },
+                        leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                        modifier = Modifier.clickable {
+                            viewModel.navigateToFolderSync()
+                            onBackClick()
+                        },
+                    )
+                    if (removedBooks.isNotEmpty()) {
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.wenku_removed_books)) },
+                            leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                            modifier = Modifier.clickable { showRemovedBooks = true },
+                        )
+                    }
+                }
+                if (settingsDestination == SharedSettingsDestination.TTS_AI && query.isBlank()) {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.listen_title)) },
+                        leadingContent = { Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null) },
+                        modifier = Modifier.clickable {
+                            viewModel.setUnifiedLibrarySection(UnifiedLibrarySection.AUDIOBOOKS.persistedValue)
+                            onBackClick()
+                        },
                     )
                 }
-                when (portableMutation) {
-                    is MobileSettingsMutation.SetTabsEnabled ->
-                        viewModel.setTabsEnabled(portableMutation.enabled)
-                    is MobileSettingsMutation.ChangeStrictFileFilter -> when (portableMutation.effect) {
-                        MobileStrictFileFilterEffect.DISABLE -> viewModel.setStrictFileFilter(false)
-                        MobileStrictFileFilterEffect.CONFIRM_ENABLE -> showStrictFilterDialog = true
-                    }
-                    is MobileSettingsMutation.SetPdfFileNameAsDisplayName ->
-                        viewModel.setUsePdfFileNameAsDisplayName(portableMutation.enabled)
-                    is MobileSettingsMutation.SetFolderSyncEnabled ->
-                        viewModel.setFolderSyncEnabled(portableMutation.enabled)
-                    is MobileSettingsMutation.SetHideReaderAi -> {
-                        saveHideReaderAiFeatures(context, portableMutation.hidden)
-                        hideReaderAi = portableMutation.hidden
-                    }
-                    null -> Unit
-                }
-                when (action) {
-                    SharedSettingsAction.APP_THEME -> showAppThemePanel = true
-                    SharedSettingsAction.LANGUAGE -> showLanguageDialog = true
-                    SharedSettingsAction.RECENT_LIMIT -> showRecentLimitDialog = true
-                    SharedSettingsAction.EXTERNAL_FILE_BEHAVIOR -> showBehaviorDialog = true
-                    SharedSettingsAction.SCREEN_CAPTURE_PROTECTION -> {
-                        val next = !uiState.isScreenCaptureProtectionEnabled
-                        viewModel.setScreenCaptureProtectionEnabled(next)
-                        val messageRes = if (next) {
-                            R.string.banner_screen_capture_protection_on
+                SharedSettingsHub(
+                    model = settingsModel,
+                    query = query,
+                    onQueryChange = { query = it },
+                    readerDefaultSettings = epubReaderDefaults,
+                    onReaderDefaultSettingsChange = { settings ->
+                        epubReaderDefaults = settings
+                        saveAndroidEpubReaderDefaultSettings(context, settings)
+                        viewModel.setRenderMode(settings.toAndroidRenderMode())
+                    },
+                    pdfReaderDefaultSettings = pdfReaderDefaults,
+                    onPdfReaderDefaultSettingsChange = { settings ->
+                        pdfReaderDefaults = settings
+                        saveAndroidPdfReaderDefaultSettings(context, settings)
+                    },
+                    ttsReplacementPreferences = ttsReplacementPreferences,
+                    onTtsReplacementPreferencesChange = { preferences ->
+                        ttsReplacementPreferences = preferences
+                        saveTtsReplacementPreferences(context, preferences)
+                    },
+                    customFonts = sharedFonts,
+                    // The shared control applies a *synchronously returned* path, but a picker sheet is
+                    // asynchronous. So this only requests the sheet and returns blank to opt out of the
+                    // shared write-back; the chosen font is applied below from the sheet's own callback.
+                    onPickCustomFont = if (showFontSelectionSheet) null else {
+                        { showFontSelectionSheet = true; "" }
+                    },
+                    customReaderThemes = customThemes,
+                    onCustomReaderThemesChange = { themes ->
+                        customThemes = themes
+                        saveCustomThemes(context, themes)
+                    },
+                    readerCustomTextureIds = importedTextureIds,
+                    onImportReaderTexture = { current ->
+                        texturePickerLauncher.launch(arrayOf("image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"))
+                        current
+                    },
+                    showTopBar = false,
+                    destination = settingsDestination,
+                    onDestinationChange = { settingsDestination = it },
+                    contentPadding = PaddingValues(0.dp),
+                    showCategoryCounts = false,
+                    modifier = Modifier.weight(1f),
+                    onAction = { action ->
+                        // Folder sync is a secondary settings surface now.  Do not
+                        // toggle the legacy local-indexing switch merely by opening
+                        // the cloud-folder selection dialog.
+                        val portableMutation = if (action == SharedSettingsAction.FOLDER_SYNC) {
+                            null
                         } else {
-                            R.string.banner_screen_capture_protection_off
+                            planMobileSettingsMutation(
+                                action = action,
+                                state = MobileSettingsMutationState(
+                                    tabsEnabled = uiState.isTabsEnabled,
+                                    strictFileFilterEnabled = uiState.useStrictFileFilter,
+                                    pdfFileNameAsDisplayName = uiState.usePdfFileNameAsDisplayName,
+                                    folderSyncEnabled = uiState.isFolderSyncEnabled,
+                                    hideReaderAi = hideReaderAi,
+                                ),
+                            )
                         }
-                        viewModel.showBanner(context.getString(messageRes))
-                    }
-                    SharedSettingsAction.CUSTOM_FONTS -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.FONTS)
-                    SharedSettingsAction.SIGN_IN -> {
-                        scope.launch {
-                            context.findActivity()?.let { activity -> viewModel.signIn(activity) }
+                        when (portableMutation) {
+                            is MobileSettingsMutation.SetTabsEnabled ->
+                                viewModel.setTabsEnabled(portableMutation.enabled)
+                            is MobileSettingsMutation.ChangeStrictFileFilter -> when (portableMutation.effect) {
+                                MobileStrictFileFilterEffect.DISABLE -> viewModel.setStrictFileFilter(false)
+                                MobileStrictFileFilterEffect.CONFIRM_ENABLE -> showStrictFilterDialog = true
+                            }
+                            is MobileSettingsMutation.SetPdfFileNameAsDisplayName ->
+                                viewModel.setUsePdfFileNameAsDisplayName(portableMutation.enabled)
+                            is MobileSettingsMutation.SetFolderSyncEnabled ->
+                                viewModel.setFolderSyncEnabled(portableMutation.enabled)
+                            is MobileSettingsMutation.SetHideReaderAi -> {
+                                saveHideReaderAiFeatures(context, portableMutation.hidden)
+                                hideReaderAi = portableMutation.hidden
+                            }
+                            null -> Unit
+                        }
+                        when (action) {
+                            SharedSettingsAction.APP_THEME -> showAppThemePanel = true
+                            SharedSettingsAction.LANGUAGE -> showLanguageDialog = true
+                            SharedSettingsAction.RECENT_LIMIT -> showRecentLimitDialog = true
+                            SharedSettingsAction.EXTERNAL_FILE_BEHAVIOR -> showBehaviorDialog = true
+                            SharedSettingsAction.SCREEN_CAPTURE_PROTECTION -> {
+                                val next = !uiState.isScreenCaptureProtectionEnabled
+                                viewModel.setScreenCaptureProtectionEnabled(next)
+                                val messageRes = if (next) {
+                                    R.string.banner_screen_capture_protection_on
+                                } else {
+                                    R.string.banner_screen_capture_protection_off
+                                }
+                                viewModel.showBanner(context.getString(messageRes))
+                            }
+                            SharedSettingsAction.CUSTOM_FONTS -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.FONTS)
+                            SharedSettingsAction.SIGN_IN -> {
+                                scope.launch {
+                                    context.findActivity()?.let { activity -> viewModel.signIn(activity) }
+                                }
+                            }
+                            SharedSettingsAction.SIGN_OUT -> showSignOutConfirmDialog = true
+                            // iOS-only for now: the shared model never emits this on
+                            // Android (includeAccountDeletion defaults to false).
+                            SharedSettingsAction.DELETE_ACCOUNT -> Unit
+                            SharedSettingsAction.CLOUD_SYNC -> {
+                                if (uiState.isProUser) {
+                                    viewModel.setSyncEnabled(!uiState.isSyncEnabled)
+                                } else {
+                                    showUpgradeDialog = true
+                                }
+                            }
+                            SharedSettingsAction.FOLDER_SYNC -> {
+                                cloudFolderSelection = viewModel.cloudFolderSyncSelection()
+                                showCloudFolderSyncDialog = true
+                            }
+                            SharedSettingsAction.DEVICE_MANAGEMENT -> viewModel.showDeviceManagementForDebug()
+                            SharedSettingsAction.AI_SETTINGS -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.AI_SETTINGS)
+                            SharedSettingsAction.HIDE_READER_AI -> Unit
+                            SharedSettingsAction.TTS_SETTINGS -> showTtsSettingsSheet = true
+                            SharedSettingsAction.CLEAR_BOOK_CACHE -> showClearBookCacheDialog = true
+                            SharedSettingsAction.CLEAR_REFLOW_CACHE -> showClearReflowCacheDialog = true
+                            SharedSettingsAction.CLEAR_CLOUD_LOCAL_DATA -> showClearAllDataDialog = true
+                            SharedSettingsAction.TEST_PANEL_DETECTION -> viewModel.testPanelDetection(context)
+                            SharedSettingsAction.TEST_SPEECH_BUBBLE_DETECTION -> viewModel.testSpeechBubbleDetection(context)
+                            SharedSettingsAction.EXPORT_LOGS -> viewModel.exportLogsToFile(context)
+                            SharedSettingsAction.FPS_OVERLAY -> Unit
+                            SharedSettingsAction.HELP_FEEDBACK -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.FEEDBACK)
+                            SharedSettingsAction.SUPPORT -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.SUPPORT_PROJECT)
+                            SharedSettingsAction.ABOUT -> showAboutDialog = true
+                            SharedSettingsAction.PDF_READER_DEFAULTS -> viewModel.showBanner(context.getString(R.string.pdf_specific_settings_existing_reader))
+                            SharedSettingsAction.TEXT_READER_DEFAULTS,
+                            SharedSettingsAction.READER_TOOLBAR,
+                            SharedSettingsAction.TTS_REPLACEMENTS,
+                            SharedSettingsAction.LOCAL_OVERRIDE_NOTE,
+                            SharedSettingsAction.TABS_TOGGLE,
+                            SharedSettingsAction.STRICT_FILE_FILTER,
+                            SharedSettingsAction.PDF_FILENAME_DISPLAY_NAME -> Unit
                         }
                     }
-                    SharedSettingsAction.SIGN_OUT -> showSignOutConfirmDialog = true
-                    // iOS-only for now: the shared model never emits this on
-                    // Android (includeAccountDeletion defaults to false).
-                    SharedSettingsAction.DELETE_ACCOUNT -> Unit
-                    SharedSettingsAction.CLOUD_SYNC -> {
-                        if (uiState.isProUser) {
-                            viewModel.setSyncEnabled(!uiState.isSyncEnabled)
-                        } else {
-                            showUpgradeDialog = true
-                        }
-                    }
-                    SharedSettingsAction.FOLDER_SYNC -> {
-                        cloudFolderSelection = viewModel.cloudFolderSyncSelection()
-                        showCloudFolderSyncDialog = true
-                    }
-                    SharedSettingsAction.DEVICE_MANAGEMENT -> viewModel.showDeviceManagementForDebug()
-                    SharedSettingsAction.AI_SETTINGS -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.AI_SETTINGS)
-                    SharedSettingsAction.HIDE_READER_AI -> Unit
-                    SharedSettingsAction.TTS_SETTINGS -> showTtsSettingsSheet = true
-                    SharedSettingsAction.CLEAR_BOOK_CACHE -> showClearBookCacheDialog = true
-                    SharedSettingsAction.CLEAR_REFLOW_CACHE -> showClearReflowCacheDialog = true
-                    SharedSettingsAction.CLEAR_CLOUD_LOCAL_DATA -> showClearAllDataDialog = true
-                    SharedSettingsAction.TEST_PANEL_DETECTION -> viewModel.testPanelDetection(context)
-                    SharedSettingsAction.TEST_SPEECH_BUBBLE_DETECTION -> viewModel.testSpeechBubbleDetection(context)
-                    SharedSettingsAction.EXPORT_LOGS -> viewModel.exportLogsToFile(context)
-                    SharedSettingsAction.FPS_OVERLAY ->
-                        DebugFpsStore.setEnabled(context, !fpsOverlayEnabled)
-                    SharedSettingsAction.HELP_FEEDBACK -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.FEEDBACK)
-                    SharedSettingsAction.SUPPORT -> navController.navigateIfReady(com.aryan.reader.shared.ui.SharedMobileAppDestination.SUPPORT_PROJECT)
-                    SharedSettingsAction.ABOUT -> showAboutDialog = true
-                    SharedSettingsAction.PDF_READER_DEFAULTS -> viewModel.showBanner(context.getString(R.string.pdf_specific_settings_existing_reader))
-                    SharedSettingsAction.TEXT_READER_DEFAULTS,
-                    SharedSettingsAction.READER_TOOLBAR,
-                    SharedSettingsAction.TTS_REPLACEMENTS,
-                    SharedSettingsAction.LOCAL_OVERRIDE_NOTE,
-                    SharedSettingsAction.TABS_TOGGLE,
-                    SharedSettingsAction.STRICT_FILE_FILTER,
-                    SharedSettingsAction.PDF_FILENAME_DISPLAY_NAME -> Unit
-                }
+                )
             }
-            )
         }
+    }
+
+    if (showRemovedBooks) {
+        AlertDialog(
+            onDismissRequest = { showRemovedBooks = false },
+            title = { Text(stringResource(R.string.wenku_removed_books)) },
+            text = {
+                if (removedBooks.isEmpty()) {
+                    Text(stringResource(R.string.wenku_no_removed_books))
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(removedBooks, key = { it.bookId }) { book ->
+                            ListItem(
+                                headlineContent = { Text(book.cardTitle()) },
+                                trailingContent = {
+                                    TextButton(onClick = { viewModel.restoreLibraryBook(book.bookId) }) {
+                                        Text(stringResource(R.string.wenku_restore_to_library))
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRemovedBooks = false }) { Text(stringResource(R.string.action_close)) }
+            },
+        )
     }
 
     if (showCloudFolderSyncDialog) {

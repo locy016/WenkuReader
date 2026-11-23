@@ -2,6 +2,7 @@ package com.aryan.reader.epub
 
 import android.content.Context
 import com.aryan.reader.FileType
+import com.aryan.reader.R
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -63,11 +64,81 @@ class SingleFileImporterTest {
         assertTrue(chapterHtml.contains("class=\"reader-txt-preformatted\""))
         assertTrue(chapterHtml.contains("white-space: pre-wrap !important; text-indent: 0 !important;"))
         assertTrue(chapterHtml.contains("First &lt;line&gt;\ncontinues"))
-        val metadata = File(book.extractionBasePath, "book_metadata_txt_preformatted_v3.json")
+        val metadata = File(book.extractionBasePath, "book_metadata_txt_preformatted_v6.json")
         assertTrue(metadata.isFile)
         val metadataText = metadata.readText()
         assertFalse(metadataText.contains("First <line>\ncontinues"))
         assertTrue(metadataText.contains("plainTextLength"))
+    }
+
+    @Test
+    fun `reader txt import keeps chapter offsets and reloads without retaining full plain text`() = runTest {
+        val importer = SingleFileImporter(contextWithCache(temp.newFolder("txt-reader-cache")))
+        val text = "　第一章 启程\n甲 < 乙 & 丙。\n\n第二章 到达\n丁 > 戊。　"
+        val book = importer.importSingleFile(
+            inputStream = ByteArrayInputStream(text.toByteArray()),
+            type = FileType.TXT,
+            originalBookNameHint = "出行.txt",
+            bookId = "reader-text",
+            retainTxtPlainText = false
+        )
+
+        val chapter = book.chapters.single()
+        assertEquals("", chapter.plainTextContent)
+        assertEquals(text.trim().length, chapter.plainTextLength)
+        assertEquals(listOf("第一章 启程", "第二章 到达"), book.tableOfContents.map { it.label })
+        val html = File(book.extractionBasePath, chapter.htmlFilePath).readText()
+        assertTrue(html.contains("甲 &lt; 乙 &amp; 丙。"))
+        assertTrue(html.contains("丁 &gt; 戊。"))
+        val reopened = importer.importSingleFile(
+            inputStream = ByteArrayInputStream(byteArrayOf()),
+            type = FileType.TXT,
+            originalBookNameHint = "出行.txt",
+            bookId = "reader-text",
+            retainTxtPlainText = false
+        )
+        assertEquals(book.chapters, reopened.chapters)
+        assertEquals(book.tableOfContents, reopened.tableOfContents)
+    }
+
+    @Test
+    fun `plain text chapter links point to the heading in the existing part and survive reload`() = runTest {
+        val importer = SingleFileImporter(contextWithCache(temp.newFolder("txt-heading-cache")))
+        val text = "第一章 启程\n甲段正文。\n\n第二章 到达\n乙段正文。"
+        suspend fun load() = importer.importSingleFile(
+            inputStream = ByteArrayInputStream(text.toByteArray()),
+            type = FileType.TXT,
+            originalBookNameHint = "出行.txt",
+            bookId = "chapter-links"
+        )
+
+        val book = load()
+        assertEquals(listOf("第一章 启程", "第二章 到达"), book.tableOfContents.map { it.label })
+        assertEquals(text, book.chapters.single().plainTextContent)
+        val second = book.tableOfContents[1]
+        assertEquals(book.chapters.single().absPath, second.absolutePath)
+        val document = Jsoup.parse(File(book.extractionBasePath, second.absolutePath).readText())
+        assertEquals("第二章 到达", document.getElementById(second.fragmentId!!)?.text())
+        assertEquals(book.tableOfContents, load().tableOfContents)
+    }
+
+    @Test
+    fun `classical chapter entries keep their order and use the next line of prose`() = runTest {
+        val context = contextWithCache(temp.newFolder("txt-classical-cache"))
+        every { context.getString(R.string.txt_opening) } returns "正文开头"
+        val text = "故事开头。且看下回分解。\n主编私房仙侠推荐！\n话说平王东迁，建都洛阳。\n且看下回分解。\n却说归舟，抵岸已晚。"
+        val book = SingleFileImporter(context).importSingleFile(
+            inputStream = ByteArrayInputStream(text.toByteArray()),
+            type = FileType.TXT,
+            originalBookNameHint = "章回.txt",
+            bookId = "classical-chapters"
+        )
+
+        assertEquals(listOf("正文开头", "1 · 话说平王东迁", "2 · 却说归舟"), book.tableOfContents.map { it.label })
+        assertEquals(text, book.chapters.single().plainTextContent)
+        val chapter = book.tableOfContents[1]
+        val document = Jsoup.parse(File(book.extractionBasePath, chapter.absolutePath).readText())
+        assertEquals("话说平王东迁，建都洛阳。", document.getElementById(chapter.fragmentId!!)?.text())
     }
 
     @Test

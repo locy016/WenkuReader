@@ -348,7 +348,8 @@ fun SharedBookInfoDialog(
     onSave: (BookItem) -> Unit,
     onSaveEmbeddedMetadata: ((BookItem) -> Unit)? = null,
     onSaveDisplayName: ((String?) -> Unit)? = null,
-    onRestore: (BookItem) -> Unit
+    onRestore: (BookItem) -> Unit,
+    readingLabel: String? = null,
 ) {
     var isEditing by remember(book.id, initiallyEditing) { mutableStateOf(initiallyEditing) }
     var titleInput by remember(book.id, book.title) { mutableStateOf(book.title.orEmpty()) }
@@ -473,6 +474,7 @@ fun SharedBookInfoDialog(
                             displayLocation = displayLocation,
                             displayTitle = displayTitle,
                             displayNameChanged = displayNameChanged,
+                            readingLabel = readingLabel,
                             onOpenTags = onOpenTags,
                             tagChipsContent = tagChipsContent,
                             onCopyPath = {
@@ -625,6 +627,7 @@ private fun SharedBookMetadataInfoContent(
     displayTitle: String,
     displayNameChanged: Boolean,
     onOpenTags: (() -> Unit)?,
+    readingLabel: String?,
     tagChipsContent: (@Composable () -> Unit)?,
     onCopyPath: () -> Unit,
     clipboardErrorMessage: String?,
@@ -671,7 +674,7 @@ private fun SharedBookMetadataInfoContent(
         }
         SharedInfoRowDetailed(readerString("format", "Format"), book.type.name)
         SharedInfoRowDetailed(readerString("size", "Size"), formatFileSize(book.fileSize))
-        SharedInfoRowDetailed(readerString("label_reading", "Reading"), book.readingProgressText(), maxLines = 2)
+        SharedInfoRowDetailed(readerString("label_reading", "Reading"), readingLabel ?: book.readingProgressText(), maxLines = 2)
     }
 
     SharedInfoSection(title = readerString("section_file", "File")) {

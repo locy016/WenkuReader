@@ -186,10 +186,14 @@ fun SharedMobileLibraryBookListCardFrame(
     cover: @Composable BoxScope.() -> Unit,
     header: @Composable RowScope.() -> Unit,
     metadata: @Composable RowScope.() -> Unit,
+    compact: Boolean = false,
     progress: @Composable () -> Unit,
 ) {
+    val libraryStyle = LocalSharedLibrarySurfaceStyle.current
+    val cardShape = libraryStyle?.shape ?: MaterialTheme.shapes.large
+    val outline = libraryStyle?.let { if (isSelected) it.activeOutline else it.outline }
     ElevatedCard(
-        shape = MaterialTheme.shapes.large,
+        shape = cardShape,
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
@@ -200,49 +204,49 @@ fun SharedMobileLibraryBookListCardFrame(
             .fillMaxWidth()
             .graphicsLayer { alpha = if (isAvailable) 1f else 0.8f }
             .then(
-                if (isSelected) {
-                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large)
-                } else {
-                    Modifier
+                when {
+                    outline != null -> Modifier.border(outline, cardShape)
+                    isSelected -> Modifier.border(2.dp, MaterialTheme.colorScheme.primary, cardShape)
+                    else -> Modifier
                 },
             )
-            .clip(MaterialTheme.shapes.large)
+            .clip(cardShape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .height(132.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 6.dp else 12.dp)
+                .then(if (compact) Modifier else Modifier.height(132.dp)),
+            verticalAlignment = if (compact) Alignment.CenterVertically else Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 16.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(0.7f)
-                    .clip(MaterialTheme.shapes.medium)
-                    .border(
-                        0.5.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        MaterialTheme.shapes.medium,
+                modifier = (if (compact) Modifier.size(42.dp, 60.dp) else Modifier.fillMaxHeight().aspectRatio(0.7f))
+                    .then(
+                        if (libraryStyle == null) {
+                            Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        } else Modifier,
                     ),
                 content = cover,
             )
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            Column(
+                modifier = Modifier.weight(1f).then(if (compact) Modifier else Modifier.fillMaxHeight()),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 0.dp),
+            ) {
                 Row(
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     content = header,
                 )
-                Spacer(Modifier.height(10.dp))
+                if (!compact) Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     content = metadata,
                 )
-                Spacer(Modifier.weight(1f))
+                if (!compact) Spacer(Modifier.weight(1f))
                 progress()
             }
         }
@@ -351,6 +355,8 @@ data class SharedMobileContextualActionLabels(
     val share: String,
     val exportAnnotations: String,
     val clear: String,
+    val deleteOriginal: String = "",
+    val category: String = "",
 )
 
 @Composable
@@ -370,6 +376,8 @@ fun SharedMobileContextualActionBar(
     onPin: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
     tagIcon: @Composable (String?) -> Unit,
+    onDeleteOriginal: (() -> Unit)? = null,
+    onCategory: (() -> Unit)? = null,
 ) {
     SharedMobileTopAppBar(
         title = {
@@ -395,6 +403,8 @@ fun SharedMobileContextualActionBar(
                     onExportAnnotations = onExportAnnotations,
                     onClear = onClear ?: onNavigateBack,
                     onDelete = onDelete,
+                    onDeleteOriginal = onDeleteOriginal,
+                    onCategory = onCategory,
                     tagIcon = tagIcon,
                 )
             } else {
@@ -451,6 +461,8 @@ internal fun SharedMobileCompactSelectionActions(
     onClear: () -> Unit,
     onDelete: () -> Unit,
     tagIcon: @Composable (String?) -> Unit,
+    onDeleteOriginal: (() -> Unit)? = null,
+    onCategory: (() -> Unit)? = null,
 ) {
     var showMore by remember { mutableStateOf(false) }
     if (selectedItemCount == 1) {
@@ -470,6 +482,13 @@ internal fun SharedMobileCompactSelectionActions(
             Icon(Icons.Default.MoreVert, contentDescription = labels.moreOptions)
         }
         SharedDropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+            onCategory?.let { action ->
+                DropdownMenuItem(
+                    text = { Text(labels.category) },
+                    leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    onClick = { showMore = false; action() },
+                )
+            }
             onTag?.let { action ->
                 DropdownMenuItem(
                     text = { Text(labels.tag) },
@@ -506,6 +525,13 @@ internal fun SharedMobileCompactSelectionActions(
                         onClick = { showMore = false; action() },
                     )
                 }
+            }
+            onDeleteOriginal?.let { action ->
+                DropdownMenuItem(
+                    text = { Text(labels.deleteOriginal, color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = { showMore = false; action() },
+                )
             }
             DropdownMenuItem(
                 text = { Text(labels.clear) },

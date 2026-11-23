@@ -16,7 +16,10 @@ import com.aryan.reader.shared.ui.SharedStringResolver
  * `SharedSettingsHub`'s model-owned English labels, and it reuses the same
  * `resources.getIdentifier` lookup as `SharedText.resolveAndroidText`.
  */
-fun androidSharedStringResolver(context: Context): SharedStringResolver {
+fun androidSharedStringResolver(
+    context: Context,
+    resolveLiteral: (String) -> String? = { null },
+): SharedStringResolver {
     val resources = context.resources
     val packageName = context.packageName
     return SharedStringResolver(
@@ -31,5 +34,6 @@ fun androidSharedStringResolver(context: Context): SharedStringResolver {
             if (id == 0) null
             else runCatching { resources.getQuantityText(id, quantity).toString() }.getOrNull()
         },
+        resolveLiteral = resolveLiteral,
     )
 }

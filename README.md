@@ -1,7 +1,21 @@
+# 文库阅读 · WenkuReader
+
+<img src="branding/wenku-reader/launcher-preview.png" width="80" alt="文库阅读图标" />
+
+基于 Episteme OSS 的 Android 手机和平板阅读应用，支持离线文档与电子书阅读。
+
+**修改声明（2026-11-23，文库阅读 0.1.7）** 文库阅读是 Episteme OSS 的独立派生项目，基于上游 `v1.0.59-oss`（`e3008fd4`）修改。主要变更包括 Android 应用标识和图标、书库界面、中文 TXT 章节识别、阅读界面和构建流程。[上游版本](https://github.com/Aryan-Raj3112/episteme/releases/tag/v1.0.59-oss)
+
+文库阅读作为一个整体按 GNU Affero General Public License v3.0 only（`AGPL-3.0-only`）提供，可依照该协议使用、修改和再分发，软件按协议规定提供且不附带担保。上游作品的版权声明以及第三方组件各自的声明和许可继续适用。[完整许可证](LICENSE)
+
+本源码修订对应 Android `ossRelease` 版 0.1.7（`versionCode 28`）。已构建的签名 APK 文件 SHA-256 为 `7d7e842793de085020fabc361b6a526dd1bb7765824f6204c549d8b2afcb7dd6`。构建步骤和原生库来源见手册。[开发、验收与 USB 发布手册](DEVELOPMENT.md)
+
 ## 文库阅读开发
 
 - [开发、验收与 USB 发布手册](DEVELOPMENT.md)
 - [项目开发约束](AGENTS.md)
+
+## 上游项目
 
 <div align="center">
 

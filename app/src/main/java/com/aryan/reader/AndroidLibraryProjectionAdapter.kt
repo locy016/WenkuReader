@@ -16,7 +16,9 @@ internal object AndroidLibraryProjectionAdapter {
         input: LibraryProjectionInput,
         folderPathResolver: FolderPathResolver
     ): AndroidLibraryProjectionContext {
-        val taggedBooks = input.recentFilesFromDb.withResolvedTags(input.dbTags, input.tagRefs)
+        val taggedBooks = input.recentFilesFromDb
+            .filterNot(RecentFileItem::isOpdsStream)
+            .withResolvedTags(input.dbTags, input.tagRefs)
         val androidBooksById = taggedBooks
             .filterNot { it.bookId.endsWith("_reflow") }
             .associateBy { it.bookId }

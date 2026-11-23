@@ -11,7 +11,8 @@ suspend fun paginateReaderBlocks(
     measurementProvider: BlockMeasurementProvider,
     density: Density,
     onCutoffDiagnostic: (String) -> Unit = {},
-    onPageGapDiagnostic: (String) -> Unit = {}
+    onPageGapDiagnostic: (String) -> Unit = {},
+    onPageCommitted: (suspend (Page) -> Unit)? = null,
 ): List<Page> {
     if (blocks.isEmpty()) return emptyList()
     val pages = mutableListOf<Page>()
@@ -63,13 +64,15 @@ suspend fun paginateReaderBlocks(
         return null
     }
 
-    fun commitPage(reason: String) {
+    suspend fun commitPage(reason: String) {
         onPageGapDiagnostic(
             "decision=commit_page reason=$reason page=${pageIndex + 1} remainingPx=$remainingHeight " +
                 "blockCount=${currentPageContent.size} blocks=${blockList()}"
         )
         zeroReaderLastBottomMargin(currentPageContent)
-        pages += Page(currentPageContent.toList())
+        val page = Page(currentPageContent.toList())
+        pages += page
+        onPageCommitted?.invoke(page)
         pageIndex++
         currentPageContent = mutableListOf()
         remainingHeight = pageHeight

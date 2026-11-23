@@ -332,14 +332,20 @@ fun SharedMobileAudiobooksSection(
      * [onPlayTtsPlayer]: card taps open, play buttons start.
      */
     onPlayAudiobook: (SharedAudiobook) -> Unit = onOpenPlayer,
+    ttsCover: @Composable (BookItem, Modifier) -> Unit = { book, coverModifier ->
+        SharedMobileTtsBookCover(book, coverModifier)
+    },
+    hideSingleSourceSwitcher: Boolean = false,
 ) {
     var source by remember { mutableStateOf(ListenSource.ALL) }
     var status by remember { mutableStateOf(SharedAudiobookStatus.ALL) }
     var sort by remember { mutableStateOf(SharedAudiobookSort.RECENTLY_LISTENED) }
     var query by remember { mutableStateOf("") }
     var sortExpanded by remember { mutableStateOf(false) }
+    val showSourceSwitcher = !hideSingleSourceSwitcher || (audiobooks.isNotEmpty() && ttsItems.isNotEmpty())
+    val effectiveSource = if (showSourceSwitcher) source else ListenSource.ALL
 
-    val visibleEntries = remember(audiobooks, ttsItems, source, status, sort, query) {
+    val visibleEntries = remember(audiobooks, ttsItems, effectiveSource, status, sort, query) {
         val audioIds = filterSharedAudiobooks(
             audiobooks.map { it.toSharedAudiobookLibraryItem() },
             status,
@@ -382,7 +388,7 @@ fun SharedMobileAudiobooksSection(
                 )
             }
         val comparator = compareListenEntries(sort)
-        when (source) {
+        when (effectiveSource) {
             ListenSource.ALL -> (audioEntries + ttsEntries).sortedWith(comparator)
             ListenSource.AUDIOBOOKS -> audioEntries.sortedWith(comparator)
             ListenSource.TTS -> ttsEntries.sortedWith(comparator)
@@ -409,11 +415,13 @@ fun SharedMobileAudiobooksSection(
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 16.dp, end = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ListenSourceSwitcher(
-                selected = source,
-                onSelected = { source = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (showSourceSwitcher) {
+                ListenSourceSwitcher(
+                    selected = source,
+                    onSelected = { source = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             OutlinedTextField(
                 value = query,
@@ -468,6 +476,7 @@ fun SharedMobileAudiobooksSection(
                         entry.tts?.let { item ->
                             SharedMobileTtsContinueCard(
                                 item = item,
+                                cover = ttsCover,
                                 isActive = ttsPlayback.connected && item.book.id == ttsPlayback.bookId,
                                 onOpen = { onOpenTtsPlayer(item, false) },
                                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -487,7 +496,7 @@ fun SharedMobileAudiobooksSection(
             }
             if (regularEntries.isEmpty() && continueEntry == null) {
                 item(key = "listen-empty") {
-                    if (source == ListenSource.TTS) {
+                    if (effectiveSource == ListenSource.TTS) {
                         TtsLibraryEmptyState(query = query)
                     } else {
                         ListenLibraryEmptyState(query = query, onAdd = onAddAudiobook)
@@ -500,6 +509,7 @@ fun SharedMobileAudiobooksSection(
                             val rowActive = ttsPlayback.connected && item.book.id == ttsPlayback.bookId
                             SharedMobileTtsRow(
                                 item = item,
+                                cover = ttsCover,
                                 isActive = rowActive,
                                 isPlaying = rowActive && ttsPlayback.isPlaying,
                                 onOpen = { onOpenTtsPlayer(item, false) },
@@ -724,9 +734,9 @@ private fun TtsLibraryEmptyState(query: String) {
 private fun ttsChapterLabel(item: SharedTtsListenItem): String =
     item.progress?.let { readerString("listen_chapter_number", "Chapter %1\$d", it.chapterIndex + 1) }
         ?: if ((item.book.progressPercentage ?: 0f) > 0f) {
-            "Continue from your reading position"
+            readerString("wenku_listen_from_progress", "Continue from your reading position")
         } else {
-            "Start listening"
+            readerString("wenku_listen_start", "Start listening")
         }
 
 private const val TtsRemainingLabel = "Generated as you listen"
@@ -806,6 +816,7 @@ private fun SharedMobileTtsRow(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     onPlay: () -> Unit = onOpen,
+    cover: @Composable (BookItem, Modifier) -> Unit,
 ) {
     Card(
         onClick = onOpen,
@@ -824,7 +835,7 @@ private fun SharedMobileTtsRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SharedMobileTtsBookCover(item.book, Modifier.size(width = 66.dp, height = 98.dp))
+            cover(item.book, Modifier.size(width = 66.dp, height = 98.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TtsSourceBadge()
@@ -841,7 +852,9 @@ private fun SharedMobileTtsRow(
                     }
                 }
                 Text(item.title, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(item.author, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item.book.author?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) }?.let { author ->
+                    Text(author, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text(
                     ttsChapterLabel(item),
                     modifier = Modifier.padding(top = 4.dp),
@@ -861,7 +874,7 @@ private fun SharedMobileTtsRow(
                     text = when {
                         item.progress?.completed == true || progressFraction >= 1f ->
                             readerString("audiobooks_completed", "Completed")
-                        progressFraction > 0f -> TtsRemainingLabel
+                        progressFraction > 0f -> readerString("wenku_listen_generating", TtsRemainingLabel)
                         else -> readerString("audiobooks_not_started", "Not started")
                     },
                     modifier = Modifier.padding(top = 5.dp),
@@ -894,6 +907,7 @@ private fun SharedMobileTtsContinueCard(
     isActive: Boolean,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    cover: @Composable (BookItem, Modifier) -> Unit,
 ) {
     Card(
         modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).testTag("TtsContinue"),
@@ -913,7 +927,7 @@ private fun SharedMobileTtsContinueCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SharedMobileTtsBookCover(item.book, Modifier.size(width = 92.dp, height = 132.dp))
+            cover(item.book, Modifier.size(width = 92.dp, height = 132.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = readerString(
@@ -928,7 +942,9 @@ private fun SharedMobileTtsContinueCard(
                     NarrationBadge(narrator = item.mediaOverlay.narrator)
                 }
                 Text(item.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(item.author, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                item.book.author?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) }?.let { author ->
+                    Text(author, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 Text(
                     ttsChapterLabel(item),
                     style = MaterialTheme.typography.bodySmall,

@@ -19,7 +19,7 @@
          exactly as in the source when editing.
     -->
     <!-- App name — brand name, must not be translated. -->
-    <string name="app_name" translatable="false">Episteme</string>
+    <string name="app_name" translatable="false">文库阅读</string>
 
     <!-- General Actions & Words -->
     <string name="action_cancel">Cancel</string>
@@ -96,7 +96,7 @@
     <!-- Navigation & Home -->
     <string name="nav_home">Home</string>
     <string name="nav_library">Library</string>
-    <string name="nav_unified_library">Library Beta</string>
+    <string name="nav_unified_library">Library</string>
     <string name="unified_library_beta">BETA</string>
     <string name="unified_library_continue_reading">Continue reading</string>
     <string name="unified_library_your_books">Your books</string>
@@ -577,7 +577,7 @@
     <!-- Footer combining Privacy Policy, Terms of Service, and Licenses links separated by bullet points. "•" is punctuation — keep as-is or adapt spacing to your language. -->
     <string name="legal_footer_combined">Privacy Policy  •  Terms of Service  •  Licenses</string>
     <!-- OSS = Open Source Software. "Episteme" is the app brand name — do not translate. -->
-    <string name="app_name_oss" translatable="false">Episteme OSS</string>
+    <string name="app_name_oss" translatable="false">文库阅读</string>
     <!-- Debug-only menu item, not shown to regular users. -->
     <string name="debug_show_device_management" translatable="false">[Debug] Show Device Management</string>
     <!-- Debug-only menu item, not shown to regular users. -->
@@ -1098,7 +1098,7 @@
 
     <!-- About Section -->
     <!-- "Episteme" is the app brand name — do not translate. -->
-    <string name="about_app_name" translatable="false">Episteme</string>
+    <string name="about_app_name" translatable="false">文库阅读</string>
     <!-- OSS = Open Source Software. -->
     <string name="about_oss_version">Open Source Version</string>
     <string name="about_play_version">Playstore Version</string>

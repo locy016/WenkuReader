@@ -193,7 +193,8 @@ class BookPaginator(
     private val hideImages: Boolean = false,
     private val verticalMarginMultiplier: Float,
     private val bookReplacementPreferences: ReaderBookReplacementPreferences = ReaderBookReplacementPreferences(),
-    private val bookReplacementFileId: String? = null
+    private val bookReplacementFileId: String? = null,
+    private val openingSpreadPageCount: Int = 0,
 ) : IPaginator {
     override var totalPageCount by mutableIntStateOf(0)
         private set
@@ -203,6 +204,9 @@ class BookPaginator(
 
     override var generation by mutableIntStateOf(0)
         private set
+
+    private var openingSpreadPages by mutableStateOf(emptyList<Page>())
+    val isShowingOpeningSpread: Boolean get() = openingSpreadPages.isNotEmpty()
 
     override val pageShiftRequest = MutableSharedFlow<Int>(extraBufferCapacity = 100, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val currentUserChapterIndex = MutableStateFlow(initialChapterToPaginate)
@@ -705,6 +709,9 @@ class BookPaginator(
                 updatePageCounts(chapterIndex, actualPageCount)
             } else if (finalizedChapterCounts.add(chapterIndex)) {
                 DurablePaginationCacheWriteScope.launch { updateAndSaveConfigurationCache() }
+            }
+            if (chapterIndex == 0 && isShowingOpeningSpread) {
+                openingSpreadPages = emptyList()
             }
             generation++
         }
@@ -1296,11 +1303,12 @@ class BookPaginator(
         val currentPageInChapter = pageIndex - chapterStart
 
         chapterAnchorPageIndex[chapterIndex]?.let { anchorPages ->
-            val anchorSet = tocAnchors.toSet()
-            return anchorPages
-                .filter { (anchor, anchorPage) -> anchor in anchorSet && anchorPage <= currentPageInChapter }
-                .maxByOrNull { it.value }
-                ?.key
+            return tocAnchors.asReversed()
+                .mapNotNull { anchor ->
+                    anchorPages[anchor]?.takeIf { it <= currentPageInChapter }?.let { anchor to it }
+                }
+                .maxByOrNull { it.second }
+                ?.first
         }
 
         var lastFoundAnchor: String? = null
@@ -1322,6 +1330,10 @@ class BookPaginator(
 
     override fun getPageContent(pageIndex: Int): Page? {
         if (isDisposed()) return null
+        openingSpreadPages.getOrNull(pageIndex)?.let {
+            Timber.v("getPageContent: Opening spread HIT for page $pageIndex.")
+            return it
+        }
         Timber.v("getPageContent requested for pageIndex $pageIndex")
         val chapterIndex = findChapterIndexForPage(pageIndex)
         if (chapterIndex == null) {
@@ -1464,8 +1476,8 @@ class BookPaginator(
         applyPageRuntimeIndexes(chapterIndex, pages)
         savePageCache(chapter, chapterIndex, pages)
 
-        updatePageCountsOnMain(chapterIndex, pages.size)
         pageCache.put(chapterIndex, pages)
+        updatePageCountsOnMain(chapterIndex, pages.size)
         if (enqueueDeferredBookProcessing.compareAndSet(true, false)) {
             enqueueBookProcessingWork()
         }
@@ -1485,11 +1497,34 @@ class BookPaginator(
     ): List<Page> {
         val segments = segmentBlocksByWritingMode(blocks, ContentBlock::isVerticalContentBlock)
         if (segments.size <= 1 && segments.firstOrNull()?.isVertical == false) {
+            val openingPages = if (chapterIndex == 0 && openingSpreadPageCount > 0) {
+                ArrayList<Page>(openingSpreadPageCount)
+            } else {
+                null
+            }
+            val publishOpeningSpread: (suspend (Page) -> Unit)? = if (openingPages == null) {
+                null
+            } else {
+                { page ->
+                    if (openingPages.size < openingSpreadPageCount) {
+                        openingPages.add(page)
+                        if (openingPages.size == openingSpreadPageCount) {
+                            withContext(Dispatchers.Main) {
+                                if (!isDisposed()) {
+                                    openingSpreadPages = openingPages.toList()
+                                    generation++
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             return paginate(
                 blocks = blocks,
                 pageHeight = constraints.maxHeight,
                 measurementProvider = measurementProvider,
-                density = density
+                density = density,
+                onPageCommitted = publishOpeningSpread,
             )
         }
         Timber.d("paginateChapter: chapter $chapterIndex has ${segments.size} writing-mode segments.")
@@ -1661,11 +1696,12 @@ class BookPaginator(
             return@withContext null
         }
 
-        val indexedPageInChapter = targetBlock?.let { blockIndex ->
+        // A long paragraph can span several pages and contain more than one heading.
+        val indexedPageInChapter = chapterAnchorPageIndex[targetChapter]?.get(anchor) ?: targetBlock?.let { blockIndex ->
             chapterPageNavigationIndex[targetChapter]
                 ?.firstOrNull { blockIndex in it.firstBlockIndex..it.lastBlockIndex }
                 ?.pageInChapter
-        } ?: chapterAnchorPageIndex[targetChapter]?.get(anchor)
+        }
 
         if (indexedPageInChapter != null) {
             val finalPage = chapterStartPage + indexedPageInChapter

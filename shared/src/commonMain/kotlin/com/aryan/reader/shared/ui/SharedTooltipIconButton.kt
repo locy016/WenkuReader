@@ -3,6 +3,7 @@
 package com.aryan.reader.shared.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -20,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 private val activeSharedTooltipState = mutableStateOf<TooltipState?>(null)
@@ -32,6 +34,7 @@ fun SharedTooltipIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     description: String? = null,
+    buttonLabel: String? = null,
     content: @Composable () -> Unit,
 ) {
     val tooltipState = rememberTooltipState(isPersistent = true)
@@ -93,7 +96,19 @@ fun SharedTooltipIconButton(
         state = tooltipState,
     ) {
         IconButton(onClick = onClick, modifier = modifier, enabled = enabled) {
-            content()
+            if (buttonLabel == null) {
+                content()
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    content()
+                    Text(
+                        text = buttonLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 }

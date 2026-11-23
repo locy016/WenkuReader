@@ -115,6 +115,10 @@ private val darkScheme = darkColorScheme(
 )
 
 @Composable
+internal fun readerToolbarContainerColor(): Color =
+    MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+
+@Composable
 fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,

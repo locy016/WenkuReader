@@ -49,6 +49,7 @@ import com.aryan.reader.TooltipIconButton
 import com.aryan.reader.areReaderAiFeaturesEnabled
 import com.aryan.reader.cardTitle
 import com.aryan.reader.epubreader.SystemUiMode
+import com.aryan.reader.ui.theme.readerToolbarContainerColor
 import kotlin.collections.isNotEmpty
 
 internal val PdfTabStripHeight = 44.dp
@@ -152,7 +153,7 @@ internal fun PdfTopBar(
     onTabClose: (String) -> Unit,
     onNewTabClick: () -> Unit,
     onGenerateDemoAnnotations: () -> Unit,
-    includeDebugActions: Boolean = BuildConfig.DEBUG
+    includeDebugActions: Boolean = false
 ) {
     com.aryan.reader.shared.ui.SharedReaderBarVisibility(
         visible = showStandardBars,
@@ -166,7 +167,7 @@ internal fun PdfTopBar(
         }
         val topBarPadding = if (isStatusBarVisible) statusBarHeightDp else 0.dp
 
-        com.aryan.reader.shared.ui.SharedReaderToolbarSurface {
+        com.aryan.reader.shared.ui.SharedReaderToolbarSurface(containerColor = readerToolbarContainerColor()) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = topBarPadding)) {
                 com.aryan.reader.shared.ui.SharedPdfTopToolbarRow {
                     if (searchState.isSearchActive) {
@@ -896,7 +897,7 @@ fun PdfBottomBar(
         val isNavBarVisible = systemUiMode != SystemUiMode.HIDDEN
         val bottomBarPadding = if (isNavBarVisible) navBarHeightDp else 0.dp
 
-        com.aryan.reader.shared.ui.SharedReaderToolbarSurface {
+        com.aryan.reader.shared.ui.SharedReaderToolbarSurface(containerColor = readerToolbarContainerColor()) {
             val bottomBarScrollState = rememberScrollState()
 
             com.aryan.reader.shared.ui.SharedPdfBottomToolbarRow(

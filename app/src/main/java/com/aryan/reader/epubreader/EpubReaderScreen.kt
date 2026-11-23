@@ -71,7 +71,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -132,9 +132,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -325,7 +323,7 @@ fun EpubReaderScreen(
     initialBookmarksJson: String?,
     isProUser: Boolean,
     onNavigateBack: () -> Unit,
-    onSavePosition: (locator: Locator, cfiForWebView: String?, progress: Float) -> Unit,
+    onSavePosition: (locator: Locator, cfiForWebView: String?, progress: Float, chapterLabel: String?) -> Unit,
     onBookmarksChanged: (bookmarksJson: String) -> Unit,
     onNavigateToPro: () -> Unit,
     coverImagePath: String?,
@@ -438,7 +436,7 @@ fun EpubReaderHost(
     walletMicros: Long = 0L,
     walletMigrated: Boolean = false,
     onNavigateBack: () -> Unit,
-    onSavePosition: (locator: Locator, cfiForWebView: String?, progress: Float) -> Unit,
+    onSavePosition: (locator: Locator, cfiForWebView: String?, progress: Float, chapterLabel: String?) -> Unit,
     onBookmarksChanged: (bookmarksJson: String) -> Unit,
     onHighlightsChanged: (highlightsJson: String) -> Unit,
     onNavigateToPro: () -> Unit,
@@ -469,13 +467,6 @@ fun EpubReaderHost(
 
     fun showBanner(message: String, isError: Boolean = false, isPersistent: Boolean = false) {
         viewModel.showBanner(message, isError, isPersistent)
-    }
-    DisposableEffect(window, view) {
-        onDispose {
-            window?.let {
-                WindowCompat.getInsetsController(it, view).show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
     }
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
@@ -676,6 +667,8 @@ fun EpubReaderHost(
     }
 
     val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Some devices still draw the gesture handle while dispatching a zero inset.
+    val chromeBottomPadding = bottomPadding.coerceAtLeast(12.dp)
     val roundedCornerBottomPadding = rememberBottomRoundedCornerPadding(view)
     val pageInfoCornerBottomPadding = roundedCornerBottomPadding.coerceAtMost(8.dp)
 
@@ -810,14 +803,6 @@ fun EpubReaderHost(
     val lastPersistedCfiState = remember { mutableStateOf(initialCfi) }
     var lastPersistedCfi by lastPersistedCfiState
     var lastPersistedCfiChapter by remember { mutableIntStateOf(initialLocator?.chapterIndex ?: -1) }
-    val emitReadingPosition by rememberUpdatedState<(Locator, String?, Float) -> Unit>({ locator, cfi, progress ->
-        lastPersistedLocator = locator
-        if (!cfi.isNullOrBlank()) {
-            lastPersistedCfi = cfi
-            lastPersistedCfiChapter = locator.chapterIndex
-        }
-        onSavePosition(locator, cfi, progress)
-    })
 
     val showAiHubSheetState = remember { mutableStateOf(false) }
     var showAiHubSheet by showAiHubSheetState
@@ -840,6 +825,26 @@ fun EpubReaderHost(
     val showBarsState = remember { mutableStateOf(false) }
     var showBars by showBarsState
     val chapters = remember(epubBook.chapters) { epubBook.chapters }
+    val tocByPath = remember(epubBook.tableOfContents) { epubBook.tableOfContents.groupBy { it.absolutePath } }
+    val txtChapterTitles = remember(epubBook.fileName, epubBook.title, chapters, tocByPath) {
+        if (epubBook.fileName.endsWith(".txt", ignoreCase = true)) {
+            TxtChapterTitles(epubBook.title, chapters.map { it.absPath }, tocByPath)
+        } else {
+            null
+        }
+    }
+    val emitReadingPosition by rememberUpdatedState<(Locator, String?, Float) -> Unit>({ locator, cfi, progress ->
+        lastPersistedLocator = locator
+        if (!cfi.isNullOrBlank()) {
+            lastPersistedCfi = cfi
+            lastPersistedCfiChapter = locator.chapterIndex
+        }
+        val chapter = chapters.getOrNull(locator.chapterIndex)
+        val chapterLabel = chapter?.let {
+            txtChapterTitles?.titleAt(it.absPath, navigation.activeFragmentId) ?: it.title
+        }
+        onSavePosition(locator, cfi, progress, chapterLabel)
+    })
 
     LaunchedEffect(epubBook, uiState.selectedBookId) {
         showBars = false
@@ -878,9 +883,14 @@ fun EpubReaderHost(
     val isTwoPageSpread = prefs.pageSpreadMode == ReaderPageSpreadMode.TWO_PAGE &&
         currentRenderMode == RenderMode.PAGINATED
     val paginatedPagerState = rememberPagerState(pageCount = {
+        val bookPaginator = paginator as? BookPaginator
         val twoPage = prefs.pageSpreadMode == ReaderPageSpreadMode.TWO_PAGE &&
             currentRenderMode == RenderMode.PAGINATED
-        EpubPageSpread.spreadCount((paginator as? BookPaginator)?.totalPageCount ?: 0, twoPage)
+        if (bookPaginator?.isShowingOpeningSpread == true) {
+            1
+        } else {
+            EpubPageSpread.spreadCount(bookPaginator?.totalPageCount ?: 0, twoPage)
+        }
     })
     fun totalBookPageCount(): Int = (paginator as? BookPaginator)?.totalPageCount ?: 0
     fun spreadToBookPage(spreadIndex: Int): Int =
@@ -1326,8 +1336,6 @@ fun EpubReaderHost(
         val outR = overlayColor.red * overlayAlpha + effectiveBg.red * (1 - overlayAlpha)
         val outG = overlayColor.green * overlayAlpha + effectiveBg.green * (1 - overlayAlpha)
         val outB = overlayColor.blue * overlayAlpha + effectiveBg.blue * (1 - overlayAlpha)
-        // Opaque: the bar is chrome, not an overlay. A translucent fill let the WebView's text
-        // show through the bottom stack, unlike the PDF reader's solid bars.
         Color(outR, outG, outB)
     }
 
@@ -2757,13 +2765,11 @@ fun EpubReaderHost(
                 Timber.tag(TAG_EPUB_PAGINATED_OPEN_DIAG).d(
                     "restore_wait chapter=$targetChapterIndex currentCount=${bookPaginator.chapterPageCounts[targetChapterIndex]} total=${bookPaginator.totalPageCount}"
                 )
-                val countReady = withTimeoutOrNull(5000L) {
-                    snapshotFlow { bookPaginator.chapterPageCounts[targetChapterIndex] }
-                        .filter { it != null && it > 0 }
-                        .first()
+                withTimeoutOrNull(5000L) {
+                    snapshotFlow { bookPaginator.isLoading }.first { loading -> !loading }
                 }
                 Timber.tag(TAG_EPUB_PAGINATED_OPEN_DIAG).d(
-                    "restore_wait_done chapter=$targetChapterIndex count=$countReady total=${bookPaginator.totalPageCount}"
+                    "restore_wait_done chapter=$targetChapterIndex count=${bookPaginator.chapterPageCounts[targetChapterIndex]} total=${bookPaginator.totalPageCount}"
                 )
             }
 
@@ -2807,7 +2813,6 @@ fun EpubReaderHost(
                 Timber.tag(TAG_EPUB_PAGINATED_OPEN_DIAG).d(
                     "restore_scroll page=$targetPage rawPage=$pageToScrollTo pageCount=$readyPageCount locator=$restoreLocator"
                 )
-                delay(16)
                 bookPaginator?.onUserScrolledTo(pageToScrollTo)
                 paginatedPagerState.scrollToPage(targetPage)
             } else {
@@ -2817,7 +2822,6 @@ fun EpubReaderHost(
                 )
             }
 
-            delay(100)
             isPagerInitialized = true
             Timber.tag(EpubSpreadBlinkTag).d(
                 "open_veil_off spread=${paginatedPagerState.currentPage} spreadCount=${paginatedPagerState.pageCount} twoPage=$isTwoPageSpread"
@@ -3009,28 +3013,19 @@ fun EpubReaderHost(
         bookmarkLocatorMap = newLocatorMap.toMap()
     }
 
-    LaunchedEffect(paginatedPagerState.currentPage, paginator, currentRenderMode) {
-        if (currentRenderMode == RenderMode.PAGINATED && paginator != null && isPagerInitialized) {
-            val chapterIndex = (paginator as? BookPaginator)?.findChapterIndexForPage(currentSpreadFirstBookPage())
-            if (chapterIndex != null) {
-                val chapterPath = chapters.getOrNull(chapterIndex)?.absPath
-                val relevantAnchors = epubBook.tableOfContents
-                    .filter { it.absolutePath == chapterPath && it.fragmentId != null }
-                    .mapNotNull { it.fragmentId }
-
-                if (relevantAnchors.isNotEmpty()) {
-                    val active = paginator!!.getActiveAnchorForPage(
-                        currentSpreadFirstBookPage(),
-                        relevantAnchors
-                    )
-                    if (navigation.activeFragmentId != active) {
-                        Timber.tag("FRAG_NAV_DEBUG").d("P-Mode Active Anchor: $active")
-                        navigation.activeFragmentId = active
-                    }
-                } else {
-                    if (navigation.activeFragmentId != null) navigation.activeFragmentId = null
-                }
-            }
+    val pageForActiveToc = when {
+        currentRenderMode == RenderMode.PAGINATED && isPagerInitialized -> currentSpreadFirstBookPage()
+        isNativeVerticalMode -> nativeVerticalCurrentPage
+        else -> null
+    }
+    LaunchedEffect(pageForActiveToc, paginator, paginator?.generation, tocByPath) {
+        val page = pageForActiveToc ?: return@LaunchedEffect
+        val bookPaginator = paginator as? BookPaginator ?: return@LaunchedEffect
+        val chapterIndex = bookPaginator.findChapterIndexForPage(page) ?: return@LaunchedEffect
+        val chapterPath = chapters.getOrNull(chapterIndex)?.absPath ?: return@LaunchedEffect
+        val anchors = tocByPath[chapterPath].orEmpty().mapNotNull { it.fragmentId }
+        navigation.activeFragmentId = if (anchors.isEmpty()) null else {
+            bookPaginator.getActiveAnchorForPage(page, anchors)
         }
     }
 
@@ -3915,6 +3910,7 @@ fun EpubReaderHost(
                 currentChapterInPaginatedMode = currentChapterInPaginatedMode,
                 renderMode = currentRenderMode,
                 readerMotionPolicy = motionPolicy,
+                locateCurrentOnOpen = drawerState.isOpen,
                 activeHighlightPalette = currentHighlightPalette,
                 onOpenPaletteManager = { showPaletteManager = true },
                 onHighlightColorChange = onHighlightColorChange,
@@ -4779,35 +4775,9 @@ fun EpubReaderHost(
 
         SharedMobileReaderScaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            contentWindowInsets = WindowInsets.statusBars,
+            contentWindowInsets = WindowInsets.displayCutout.only(WindowInsetsSides.Top),
         ) { scaffoldPaddingValues ->
-            val currentTopPadding = scaffoldPaddingValues.calculateTopPadding()
-            var stableTopPadding by remember { mutableStateOf(0.dp) }
-            if (currentTopPadding > stableTopPadding) {
-                stableTopPadding = currentTopPadding
-            }
-
-            val stableChromeTopPadding = if (prefs.systemUiMode == SystemUiMode.HIDDEN) {
-                0.dp
-            } else {
-                val insets = ViewCompat.getRootWindowInsets(view)
-                val ignoringVisibilityTopPx = insets?.getInsetsIgnoringVisibility(
-                    WindowInsetsCompat.Type.statusBars())?.top ?: 0
-                val ignoringVisibilityTop = with(density) { ignoringVisibilityTopPx.toDp() }
-
-                if (ignoringVisibilityTop > 0.dp) {
-                    ignoringVisibilityTop
-                } else if (stableTopPadding > 0.dp) {
-                    stableTopPadding
-                } else {
-                    24.dp
-                }
-            }
-            val effectiveTopPadding = when {
-                currentRenderMode == RenderMode.PAGINATED -> stableChromeTopPadding
-                isNativeVerticalMode -> stableChromeTopPadding
-                else -> currentTopPadding
-            }
+            val readerTopInset = scaffoldPaddingValues.calculateTopPadding()
 
             val epubJumpBackLabel = epubJumpHistory.backLocator?.epubJumpLabel()
             val epubJumpForwardLabel = epubJumpHistory.forwardLocator?.epubJumpLabel()
@@ -4886,7 +4856,7 @@ fun EpubReaderHost(
                     .fillMaxSize()
                     .background(effectiveBg)
                     .then(activeTextureModifier)
-                    .padding(top = effectiveTopPadding)
+                    .padding(top = readerTopInset)
                     .focusRequester(containerFocusRequester)
                     .focusable()
                     .volumeScrollHandler(
@@ -5353,17 +5323,18 @@ fun EpubReaderHost(
 
                 val pageInfoChromeTopPadding =
                     if (prefs.pageInfoPosition == PageInfoPosition.TOP && showBars) 55.dp else 0.dp
-                val pageInfoChromeBottomPadding =
-                    if (prefs.pageInfoPosition == PageInfoPosition.BOTTOM && showBars) {
-                        bottomPadding + 45.dp + if (isEpubJumpHistoryVisible) 40.dp else 0.dp
-                    } else {
-                        0.dp
-                    }
+                val showPageInfo = isPageInfoVisible &&
+                    !(prefs.pageInfoPosition == PageInfoPosition.BOTTOM && showBars)
                 val readerClockTime = rememberSharedReaderClockTime()
+                val pageInfoSurface = if (prefs.pageInfoPosition == PageInfoPosition.BOTTOM) {
+                    Modifier.background(infoBarBgColor.copy(alpha = 0.55f))
+                } else {
+                    Modifier.background(infoBarBgColor).then(activeTextureModifier)
+                }
 
                 // Page Info Bar (Vertical)
                 AnimatedVisibility(
-                    visible = currentRenderMode == RenderMode.VERTICAL_SCROLL && isPageInfoVisible,
+                    visible = currentRenderMode == RenderMode.VERTICAL_SCROLL && showPageInfo,
                     enter = if (motionPolicy.reduceMotion) {
                         androidx.compose.animation.EnterTransition.None
                     } else {
@@ -5376,14 +5347,13 @@ fun EpubReaderHost(
                     },
                     modifier = Modifier
                         .align(if (prefs.pageInfoPosition == PageInfoPosition.TOP) Alignment.TopCenter else Alignment.BottomCenter)
-                        .padding(top = pageInfoChromeTopPadding, bottom = pageInfoChromeBottomPadding)
+                        .padding(top = pageInfoChromeTopPadding)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(pageInfoBarHeight)
-                            .background(infoBarBgColor)
-                            .then(activeTextureModifier)
+                            .then(pageInfoSurface)
                             // The clock and the percentage are pinned to the very
                             // edges, so they are the only parts of the reader that can
                             // sit under a cutout or a gesture-nav pill, and the only
@@ -5408,9 +5378,11 @@ fun EpubReaderHost(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        val chapterTitle =
-                            chapters.getOrNull(currentChapterIndex)?.title?.trim()
-                                ?: "Chapter"
+                        val chapterIndex = nativeVerticalLocation?.chapterIndex.takeIf { isNativeVerticalMode }
+                            ?: currentChapterIndex
+                        val chapter = chapters.getOrNull(chapterIndex)
+                        val chapterTitle = chapter?.title?.trim() ?: stringResource(R.string.chapter)
+                        val txtChapterTitle = txtChapterTitles?.titleAt(chapter?.absPath, navigation.activeFragmentId)
 
                         val displayPageInfo = when {
                             isNativeVerticalMode && nativeVerticalDisplayPageInfo != null ->
@@ -5428,7 +5400,7 @@ fun EpubReaderHost(
 
                         SharedReaderPageInfoBarRow(
                             clockText = readerClockTime,
-                            titleText = "$chapterTitle$displayPageInfo",
+                            titleText = txtChapterTitle ?: "$chapterTitle$displayPageInfo",
                             progressText = progressText,
                             color = effectiveText.copy(alpha = 0.8f),
                             contentHeight = pageInfoBarContentHeight,
@@ -5439,7 +5411,7 @@ fun EpubReaderHost(
 
                 // Page Info Bar (Paginated)
                 AnimatedVisibility(
-                    visible = currentRenderMode == RenderMode.PAGINATED && paginator != null && isPageInfoVisible && paginatedPagerState.pageCount > 0,
+                    visible = currentRenderMode == RenderMode.PAGINATED && paginator != null && showPageInfo && paginatedPagerState.pageCount > 0,
                     enter = if (motionPolicy.reduceMotion) {
                         androidx.compose.animation.EnterTransition.None
                     } else {
@@ -5452,14 +5424,13 @@ fun EpubReaderHost(
                     },
                     modifier = Modifier
                         .align(if (prefs.pageInfoPosition == PageInfoPosition.TOP) Alignment.TopCenter else Alignment.BottomCenter)
-                        .padding(top = pageInfoChromeTopPadding, bottom = pageInfoChromeBottomPadding)
+                        .padding(top = pageInfoChromeTopPadding)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(pageInfoBarHeight)
-                            .background(infoBarBgColor)
-                            .then(activeTextureModifier)
+                            .then(pageInfoSurface)
                             // Same edge handling as the vertical bar above; see the
                             // comment there.
                             .windowInsetsPadding(
@@ -5478,8 +5449,10 @@ fun EpubReaderHost(
                     ) {
                         val bookPaginator = paginator as? BookPaginator
                         val chapterIndex = currentChapterInPaginatedMode
+                        val chapterPath = chapterIndex?.let(chapters::getOrNull)?.absPath
+                        val txtChapterTitle = txtChapterTitles?.titleAt(chapterPath, navigation.activeFragmentId)
 
-                        val textToShow = if (bookPaginator != null && chapterIndex != null) {
+                        val textToShow = txtChapterTitle ?: if (bookPaginator != null && chapterIndex != null) {
                             val chapterTitle =
                                 chapters.getOrNull(chapterIndex)?.title?.trim()
                                     ?: stringResource(R.string.chapter)
@@ -5789,12 +5762,12 @@ fun EpubReaderHost(
                         showBars = !isMusicianMode
                     },
                     searchFocusRequester = searchFocusRequester,
-                    // This layer is inset by `effectiveTopPadding`; the bar lifts itself back to
+                    // This layer is inset by `readerTopInset`; the bar lifts itself back to
                     // the screen edge (see `hostTopInset`) and paints the status-bar strip inside
                     // its own Surface, the way the PDF reader does. The ignoring-visibility inset
                     // keeps the tool row put while transient system bars swipe in.
-                    topInset = stableChromeTopPadding,
-                    hostTopInset = effectiveTopPadding,
+                    topInset = readerTopInset,
+                    hostTopInset = readerTopInset,
                     modifier = Modifier.align(Alignment.TopCenter),
                     onOpenTtsSettings = { showTtsSettingsSheet = true },
                     onOpenTtsReplacements = { showTtsReplacementsSheet = true },
@@ -5865,7 +5838,7 @@ fun EpubReaderHost(
                 )
 
                 val autoScrollPadding by animateDpAsState(
-                    targetValue = if (showBars) (bottomPadding + 45.dp + 16.dp) else 32.dp,
+                    targetValue = if (showBars) (chromeBottomPadding + 45.dp + 16.dp) else 32.dp,
                     animationSpec = tween(motionPolicy.durationMillis(200)),
                     label = "AutoScrollPadding"
                 )
@@ -5877,7 +5850,7 @@ fun EpubReaderHost(
                 )
 
                 val ttsOverlayPadding by animateDpAsState(
-                    targetValue = if (showBars) (bottomPadding + 45.dp + 16.dp) else 32.dp,
+                    targetValue = if (showBars) (chromeBottomPadding + 45.dp + 16.dp) else 32.dp,
                     animationSpec = tween(motionPolicy.durationMillis(200)),
                     label = "TtsOverlayPadding"
                 )
@@ -5888,7 +5861,7 @@ fun EpubReaderHost(
                 // painted over the card's lower ~24dp.
                 val mediaOverlayBottomPadding by animateDpAsState(
                     targetValue = sharedMobileEpubMediaOverlayBottomPadding(
-                        bottomChromePadding = sharedMobileEpubBottomChromePadding(bottomPadding),
+                        bottomChromePadding = sharedMobileEpubBottomChromePadding(chromeBottomPadding),
                         // Same condition the page info bar itself uses to sit at the bottom, so the
                         // reserve and the thing it reserves for can never disagree.
                         pageInfoReserve = if (
@@ -6116,7 +6089,7 @@ fun EpubReaderHost(
                 EpubJumpHistoryBar(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = bottomPadding + 45.dp),
+                        .padding(bottom = chromeBottomPadding + 45.dp),
                     showStandardBars = showBars,
                     searchStateActive = searchState.isSearchActive,
                     backLabel = epubJumpBackLabel,
@@ -6186,7 +6159,7 @@ fun EpubReaderHost(
                     // Paint the navigation-bar strip inside the toolbar surface so
                     // the bar's colour reaches the screen edge; the nav-bar scrims
                     // below remain for the chrome-hidden state.
-                    bottomInset = bottomPadding,
+                    bottomInset = chromeBottomPadding,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     readerMotionPolicy = motionPolicy
                 )
@@ -6421,7 +6394,7 @@ fun EpubReaderHost(
                     nativeVerticalTotalPages = nativeVerticalTotalPages,
                     clientHeightPx = currentClientHeightValue,
                     webViewRefForTts = webViewRefForTts,
-                    bottomPadding = bottomPadding,
+                    bottomPadding = if (showBars) chromeBottomPadding else bottomPadding,
                     isJumpHistoryVisible = isEpubJumpHistoryVisible,
                     isPageInfoVisible = isPageInfoVisible,
                     pageInfoPosition = prefs.pageInfoPosition,

@@ -60,7 +60,6 @@ import com.aryan.reader.shared.SharedSettingsItemModel
 import com.aryan.reader.shared.SharedSettingsPageKind
 import com.aryan.reader.shared.SharedSettingsPageModel
 import com.aryan.reader.shared.SharedSettingsSearchResult
-import com.aryan.reader.shared.parentDestination
 import com.aryan.reader.shared.reader.ReaderSettings
 
 @Composable
@@ -88,10 +87,12 @@ fun SharedSettingsHub(
     onBack: (() -> Unit)? = null,
     destination: SharedSettingsDestination = SharedSettingsDestination.ROOT,
     onDestinationChange: (SharedSettingsDestination) -> Unit = {},
-    contentPadding: PaddingValues = PaddingValues(0.dp)
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    showCategoryCounts: Boolean = true,
 ) {
     val page = remember(model, destination) { model.page(destination) }
-    val searchResults = remember(model, query) { model.searchResults(query) }
+    val resolver = LocalSharedStringResolver.current
+    val searchResults = remember(model, query, resolver) { model.searchResults(query, resolver::literal) }
 
     fun navigateTo(next: SharedSettingsDestination) {
         onQueryChange("")
@@ -103,7 +104,7 @@ fun SharedSettingsHub(
             onQueryChange("")
             return
         }
-        val parent = destination.parentDestination()
+        val parent = page.parent
         if (parent != null) {
             onDestinationChange(parent)
         } else {
@@ -151,6 +152,7 @@ fun SharedSettingsHub(
                 page.kind == SharedSettingsPageKind.ROOT -> SharedSettingsCategoryList(
                     categories = page.categories,
                     onNavigate = ::navigateTo,
+                    showCounts = showCategoryCounts,
                     modifier = Modifier.weight(1f)
                 )
                 page.kind == SharedSettingsPageKind.CATEGORY -> SharedSettingsItemList(
@@ -211,6 +213,7 @@ private fun SharedSettingsHeader(
 private fun SharedSettingsCategoryList(
     categories: List<SharedSettingsCategoryModel>,
     onNavigate: (SharedSettingsDestination) -> Unit,
+    showCounts: Boolean,
     modifier: Modifier
 ) {
     LazyColumn(
@@ -220,7 +223,7 @@ private fun SharedSettingsCategoryList(
     ) {
         categories.forEach { category ->
             item(key = category.destination.name) {
-                SharedSettingsCategoryRow(category = category, onNavigate = onNavigate)
+                SharedSettingsCategoryRow(category = category, onNavigate = onNavigate, showCount = showCounts)
             }
         }
     }
@@ -229,7 +232,8 @@ private fun SharedSettingsCategoryList(
 @Composable
 private fun SharedSettingsCategoryRow(
     category: SharedSettingsCategoryModel,
-    onNavigate: (SharedSettingsDestination) -> Unit
+    onNavigate: (SharedSettingsDestination) -> Unit,
+    showCount: Boolean,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -258,11 +262,13 @@ private fun SharedSettingsCategoryRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    if (category.itemCount == 1) "1 setting" else "${category.itemCount} settings",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                if (showCount) {
+                    Text(
+                        if (category.itemCount == 1) "1 setting" else "${category.itemCount} settings",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
         }
