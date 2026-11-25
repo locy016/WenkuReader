@@ -77,7 +77,7 @@ fun ThemedBookCover(
     }
 
     val category = item.libraryBookGroup().category
-    val palette = item.coverPalette(category)
+    val palette = item.coverPalette(category, generated = coverRequest == null)
     BoxWithConstraints(modifier = modifier) {
         val edge = (maxWidth * 0.018f).coerceIn(1.dp, 2.5.dp)
         val shadow = (maxWidth * 0.028f).coerceIn(1.dp, 4.dp)
@@ -263,9 +263,11 @@ private val coverPalettes = listOf(
 internal fun libraryCategoryAccent(category: LibraryBookCategory): Color =
     coverPalettes[category.paletteIndex].accent
 
-private fun RecentFileItem.coverPalette(category: LibraryBookCategory): CoverPalette {
-    val family = coverPalettes[category.paletteIndex]
+private fun RecentFileItem.coverPalette(category: LibraryBookCategory, generated: Boolean): CoverPalette {
     val variation = coverPalettes[coverColorSeed() % coverPalettes.size]
+    if (generated) return variation
+
+    val family = coverPalettes[category.paletteIndex]
     return CoverPalette(
         lerp(family.paper, variation.paper, 0.18f),
         lerp(family.accent, variation.accent, 0.18f),

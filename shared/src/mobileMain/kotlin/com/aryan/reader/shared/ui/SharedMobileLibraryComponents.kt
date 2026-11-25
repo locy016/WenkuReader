@@ -183,7 +183,7 @@ fun SharedMobileLibraryBookListCardFrame(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
-    cover: @Composable BoxScope.() -> Unit,
+    cover: (@Composable BoxScope.() -> Unit)? = null,
     header: @Composable RowScope.() -> Unit,
     metadata: @Composable RowScope.() -> Unit,
     compact: Boolean = false,
@@ -221,15 +221,17 @@ fun SharedMobileLibraryBookListCardFrame(
             verticalAlignment = if (compact) Alignment.CenterVertically else Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 16.dp),
         ) {
-            Box(
-                modifier = (if (compact) Modifier.size(42.dp, 60.dp) else Modifier.fillMaxHeight().aspectRatio(0.7f))
-                    .then(
-                        if (libraryStyle == null) {
-                            Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        } else Modifier,
-                    ),
-                content = cover,
-            )
+            if (cover != null) {
+                Box(
+                    modifier = (if (compact) Modifier.size(42.dp, 60.dp) else Modifier.fillMaxHeight().aspectRatio(0.7f))
+                        .then(
+                            if (libraryStyle == null) {
+                                Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            } else Modifier,
+                        ),
+                    content = cover,
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f).then(if (compact) Modifier else Modifier.fillMaxHeight()),
                 verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 0.dp),

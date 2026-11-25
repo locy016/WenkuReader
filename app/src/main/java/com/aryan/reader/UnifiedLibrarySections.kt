@@ -1,9 +1,10 @@
 package com.aryan.reader
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Book
@@ -34,19 +37,20 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpSize
 import com.aryan.reader.data.RecentFileItem
@@ -219,27 +223,39 @@ private fun LibraryReadingStatusButtons(
     onFilterChange: (UnifiedLibraryFilter) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val style = librarySurfaceStyle()
-    val buttonColors = SegmentedButtonDefaults.colors(
-        activeContainerColor = colors.primary.copy(alpha = 0.12f),
-        activeContentColor = colors.primary,
-        inactiveContainerColor = Color.Transparent,
-        inactiveContentColor = colors.onSurface,
-    )
-    SingleChoiceSegmentedButtonRow(
-        Modifier.widthIn(max = 224.dp).fillMaxWidth().testTag("UnifiedLibraryReadingStatus"),
+    Row(
+        modifier = Modifier
+            .widthIn(max = 224.dp)
+            .fillMaxWidth()
+            .clip(LibrarySurfaceShape)
+            .background(colors.surfaceContainerLow)
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.60f), LibrarySurfaceShape)
+            .selectableGroup()
+            .testTag("UnifiedLibraryReadingStatus"),
     ) {
-        UnifiedLibraryFilter.entries.forEachIndexed { index, option ->
+        UnifiedLibraryFilter.entries.forEach { option ->
             val selected = filter == option
-            SegmentedButton(
-                selected = selected,
-                onClick = { onFilterChange(option) },
-                shape = SegmentedButtonDefaults.itemShape(index, UnifiedLibraryFilter.entries.size, LibrarySurfaceShape),
-                colors = buttonColors,
-                border = if (selected) style.activeOutline else style.outline,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                icon = {},
+            val label = stringResource(option.labelRes)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .clip(LibrarySurfaceShape)
+                    .selectable(
+                        selected = selected,
+                        role = Role.Tab,
+                        onClick = { onFilterChange(option) },
+                    )
+                    .semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
             ) {
+                if (selected) {
+                    Box(
+                        Modifier.matchParentSize()
+                            .padding(3.dp)
+                            .background(colors.primaryContainer, LibrarySurfaceShape),
+                    )
+                }
                 Icon(
                     imageVector = when (option) {
                         UnifiedLibraryFilter.ALL -> Icons.AutoMirrored.Filled.LibraryBooks
@@ -247,8 +263,9 @@ private fun LibraryReadingStatusButtons(
                         UnifiedLibraryFilter.FINISHED -> Icons.Default.Check
                         UnifiedLibraryFilter.UNREAD -> Icons.Default.Book
                     },
-                    contentDescription = stringResource(option.labelRes),
-                    modifier = Modifier.size(22.dp),
+                    contentDescription = null,
+                    modifier = Modifier.size(21.dp),
+                    tint = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
                 )
             }
         }
@@ -332,7 +349,8 @@ internal fun UnifiedLibraryHome(
                 onLongClick = { onBookLongClick(item) },
                 onHitClick = { hit -> onContentHitClick(item, hit, query) },
                 usePdfFileNameAsDisplayName = usePdfFileNameAsDisplayName,
-                animateOpening = selectedBookIds.isEmpty(),
+                showCover = !useListView,
+                animateOpening = !useListView && selectedBookIds.isEmpty(),
             )
         },
         onFilterChange = onFilterChange,
@@ -378,7 +396,6 @@ internal fun UnifiedLibraryHome(
                 onItemLongClick = { onBookLongClick(item) },
                 isDownloading = item.bookId in downloadingBookIds,
                 usePdfFileNameAsDisplayName = usePdfFileNameAsDisplayName,
-                animateOpening = selectedBookIds.isEmpty(),
             )
         },
         widthClass = when (widthSizeClass) {

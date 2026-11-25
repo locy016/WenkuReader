@@ -157,8 +157,8 @@ android {
         applicationId = "app.juanzhou.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.1.11"
+        versionCode = 33
+        versionName = "0.1.12"
         buildConfigField("String", "WENKU_SOURCE_TAG", "\"v${versionName}\"")
 
         if (prebuiltNativeDir != null) {
@@ -220,7 +220,7 @@ android {
 
     buildTypes {
         debug {
-            versionNameSuffix = "-dev.32"
+            versionNameSuffix = "-dev.33"
         }
 
         release {

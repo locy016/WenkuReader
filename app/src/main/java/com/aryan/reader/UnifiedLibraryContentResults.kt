@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -53,6 +52,7 @@ internal fun LibraryContentSearchResultRow(
     onHitClick: (SharedGlobalSearchHit) -> Unit = {},
     usePdfFileNameAsDisplayName: Boolean = false,
     modifier: Modifier = Modifier,
+    showCover: Boolean = true,
     animateOpening: Boolean = false,
 ) {
     val visibleHits = SharedContentSearchHitVisibility.hitsFor(result, expanded)
@@ -76,14 +76,19 @@ internal fun LibraryContentSearchResultRow(
         ),
     ) {
         Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ThemedBookCover(
-                    item = item,
-                    contentDescription = item.displayName,
-                    modifier = Modifier.size(width = 40.dp, height = 56.dp).recordLibraryCover(coverTap),
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (showCover) {
+                    ThemedBookCover(
+                        item = item,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.size(width = 40.dp, height = 56.dp).recordLibraryCover(coverTap),
+                    )
+                }
                 Column(
-                    Modifier.weight(1f).padding(start = 12.dp),
+                    Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
@@ -102,6 +107,7 @@ internal fun LibraryContentSearchResultRow(
                         )
                     }
                 }
+                if (!showCover) FileTypeBadge(item.type, compact = true)
                 if (result.matchingChunkCount > 1) {
                     Text(
                         text = pluralStringResource(

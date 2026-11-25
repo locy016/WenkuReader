@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -22,6 +24,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aryan.reader.shared.ui.SharedLibrarySurfaceStyle
 
@@ -51,50 +56,59 @@ internal fun librarySurfaceStyle(): SharedLibrarySurfaceStyle {
 }
 
 @Composable
-internal fun LibraryFloatingActions(onImport: () -> Unit, onContinueReading: (() -> Unit)?) {
-    val style = librarySurfaceStyle()
+internal fun LibraryHomeActions(onImport: () -> Unit, onContinueReading: (() -> Unit)?) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        LibraryFloatingIcon(
-            icon = Icons.Outlined.FileOpen,
-            description = stringResource(R.string.unified_library_import),
-            style = style,
-            onClick = onImport,
-            modifier = Modifier.testTag("UnifiedLibraryImport"),
-        )
-        if (onContinueReading != null) {
-            LibraryFloatingIcon(
-                icon = Icons.AutoMirrored.Filled.MenuBook,
-                description = stringResource(R.string.unified_library_continue_reading),
-                style = style,
-                onClick = onContinueReading,
-                modifier = Modifier.testTag("UnifiedLibraryContinueReading"),
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            LibraryHomeAction(
+                icon = Icons.Outlined.FileOpen,
+                label = stringResource(R.string.unified_library_import),
+                onClick = onImport,
+                modifier = Modifier.testTag("UnifiedLibraryImport"),
             )
+        }
+        if (onContinueReading != null) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                LibraryHomeAction(
+                    icon = Icons.AutoMirrored.Filled.MenuBook,
+                    label = stringResource(R.string.unified_library_continue_reading),
+                    onClick = onContinueReading,
+                    emphasized = true,
+                    modifier = Modifier.testTag("UnifiedLibraryContinueReading"),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun LibraryFloatingIcon(
+private fun LibraryHomeAction(
     icon: ImageVector,
-    description: String,
-    style: SharedLibrarySurfaceStyle,
+    label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
-        modifier = modifier.size(48.dp),
-        shape = style.shape,
-        border = style.outline,
-        color = colors.surface.copy(alpha = 0.88f),
-        contentColor = colors.onSurface,
+        modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.Button },
+        shape = LibrarySurfaceShape,
+        border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.60f)),
+        color = if (emphasized) colors.primaryContainer else colors.surfaceContainerHigh,
+        contentColor = if (emphasized) colors.onPrimaryContainer else colors.onSurface,
+        shadowElevation = 2.dp,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

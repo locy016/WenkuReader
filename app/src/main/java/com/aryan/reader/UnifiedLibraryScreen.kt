@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FabPosition
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -358,6 +357,7 @@ fun UnifiedLibraryScreen(
     // leaving search. Reads the IME inset directly so no shared-API change
     // is needed; dialogs still win because they register back later (LIFO).
     val isKeyboardOpen = WindowInsets.isImeVisible
+    val showLibraryActions = selectedItems.isEmpty() && !isKeyboardOpen
     val backAction = nextLibraryBackAction(
         hasSelection = selectedItems.isNotEmpty(),
         isKeyboardOpen = isKeyboardOpen,
@@ -379,14 +379,7 @@ fun UnifiedLibraryScreen(
         importDescription = stringResource(R.string.unified_library_import),
         addAudiobookDescription = stringResource(R.string.listen_add),
         onImport = importFiles,
-        homeFabPosition = FabPosition.Center,
-        homeFloatingActions = {
-            LibraryFloatingActions(
-                onImport = importFiles,
-                onContinueReading = continueReading?.let { book -> { openLibraryBook(book) } },
-            )
-        },
-        showFloatingActionButton = selectedItems.isEmpty() && !isKeyboardOpen,
+        showFloatingActionButton = showLibraryActions && section != UnifiedLibrarySection.HOME,
         onAddAudiobook = { showAudiobookAddSheet = true },
         canPullToSync = canPullToSync,
         isRefreshing = uiState.isRefreshing,
@@ -550,47 +543,58 @@ fun UnifiedLibraryScreen(
         },
         sectionContent = { displayedSection, padding ->
             when (displayedSection) {
-                UnifiedLibrarySection.HOME -> if (isEmptyLibrary && query.isBlank()) {
-                    EmptyState(
-                        title = stringResource(R.string.your_library_empty),
-                        message = stringResource(R.string.wenku_empty_library_details),
-                        onSelectFileClick = importFiles,
-                        primaryButtonText = null,
-                        secondaryButtonText = stringResource(R.string.wenku_local_folders),
-                        onSecondaryClick = { selectSection(UnifiedLibrarySection.FOLDERS) },
-                        modifier = Modifier.fillMaxSize().padding(padding),
-                    )
-                } else UnifiedLibraryHome(
-                    modifier = Modifier.padding(padding),
-                    books = visibleBooks,
-                    groupOrder = groupOrder,
-                    filter = filter,
-                    query = debouncedQuery,
-                    sortOrder = uiState.sortOrder,
-                    advancedFilterCount = advancedFilterCount,
-                    useListView = uiState.unifiedLibraryListView,
-                    selectedBookIds = uiState.contextualActionItems.mapTo(mutableSetOf()) { it.bookId },
-                    pinnedBookIds = uiState.pinnedLibraryBookIds,
-                    downloadingBookIds = uiState.downloadingBookIds,
-                    usePdfFileNameAsDisplayName = uiState.usePdfFileNameAsDisplayName,
-                    onFilterChange = { filter = it },
-                    onControlsClick = { showLibraryControls = true },
-                    onAdvancedFiltersClick = { showAdvancedFilters = true },
-                    onListViewChange = viewModel::setUnifiedLibraryListView,
-                    widthSizeClass = widthSizeClass,
-                    isLibraryEmpty = uiState.rawLibraryFiles.isEmpty(),
-                    onBookClick = ::openLibraryBook,
-                    onBookLongClick = viewModel::onRecentItemLongPress,
-                    onContentHitClick = { item, hit, hitQuery ->
-                        viewModel.openLibrarySearchHit(item, hit, hitQuery)
-                    },
-                    openTabs = uiState.openTabs,
-                    tabsEnabled = uiState.isTabsEnabled,
-                    onCloseTab = { viewModel.closeTab(it.bookId) },
-                    onCloseAllTabs = { showCloseAllTabsDialog = true },
-                    searchInsideFiles = uiState.libraryState.searchInsideFiles,
-                    contentSearchResults = uiState.libraryState.contentSearchResults,
-                )
+                UnifiedLibrarySection.HOME -> Column(Modifier.fillMaxSize().padding(padding)) {
+                    val body = Modifier.weight(1f)
+                    if (isEmptyLibrary && query.isBlank()) {
+                        EmptyState(
+                            title = stringResource(R.string.your_library_empty),
+                            message = stringResource(R.string.wenku_empty_library_details),
+                            onSelectFileClick = importFiles,
+                            primaryButtonText = null,
+                            secondaryButtonText = stringResource(R.string.wenku_local_folders),
+                            onSecondaryClick = { selectSection(UnifiedLibrarySection.FOLDERS) },
+                            modifier = body.fillMaxSize(),
+                        )
+                    } else {
+                        UnifiedLibraryHome(
+                            modifier = body,
+                            books = visibleBooks,
+                            groupOrder = groupOrder,
+                            filter = filter,
+                            query = debouncedQuery,
+                            sortOrder = uiState.sortOrder,
+                            advancedFilterCount = advancedFilterCount,
+                            useListView = uiState.unifiedLibraryListView,
+                            selectedBookIds = uiState.contextualActionItems.mapTo(mutableSetOf()) { it.bookId },
+                            pinnedBookIds = uiState.pinnedLibraryBookIds,
+                            downloadingBookIds = uiState.downloadingBookIds,
+                            usePdfFileNameAsDisplayName = uiState.usePdfFileNameAsDisplayName,
+                            onFilterChange = { filter = it },
+                            onControlsClick = { showLibraryControls = true },
+                            onAdvancedFiltersClick = { showAdvancedFilters = true },
+                            onListViewChange = viewModel::setUnifiedLibraryListView,
+                            widthSizeClass = widthSizeClass,
+                            isLibraryEmpty = uiState.rawLibraryFiles.isEmpty(),
+                            onBookClick = ::openLibraryBook,
+                            onBookLongClick = viewModel::onRecentItemLongPress,
+                            onContentHitClick = { item, hit, hitQuery ->
+                                viewModel.openLibrarySearchHit(item, hit, hitQuery)
+                            },
+                            openTabs = uiState.openTabs,
+                            tabsEnabled = uiState.isTabsEnabled,
+                            onCloseTab = { viewModel.closeTab(it.bookId) },
+                            onCloseAllTabs = { showCloseAllTabsDialog = true },
+                            searchInsideFiles = uiState.libraryState.searchInsideFiles,
+                            contentSearchResults = uiState.libraryState.contentSearchResults,
+                        )
+                    }
+                    if (showLibraryActions) {
+                        LibraryHomeActions(
+                            onImport = importFiles,
+                            onContinueReading = continueReading?.let { book -> { openLibraryBook(book) } },
+                        )
+                    }
+                }
                 UnifiedLibrarySection.AUDIOBOOKS -> AudiobooksLibrarySection(
                     modifier = Modifier.padding(padding),
                     audiobooks = importedAudiobooks,

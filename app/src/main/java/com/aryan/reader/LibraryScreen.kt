@@ -15,18 +15,14 @@
 
 package com.aryan.reader
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,7 +40,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -80,46 +75,15 @@ internal fun LibraryListItem(
     onItemLongClick: () -> Unit,
     isDownloading: Boolean,
     usePdfFileNameAsDisplayName: Boolean = false,
-    animateOpening: Boolean = false,
 ) {
-    val coverTap = rememberLibraryCoverTap(item, animateOpening)
     val progress = (item.progressPercentage?.takeIf(Float::isFinite) ?: 0f).coerceIn(0f, 100f)
     SharedMobileLibraryBookListCardFrame(
         isAvailable = item.isAvailable,
         isSelected = isSelected,
         compact = true,
-        onClick = {
-            coverTap?.record(item)
-            onItemClick()
-        },
+        onClick = onItemClick,
         onLongClick = onItemLongClick,
         modifier = Modifier.testTag("LibraryBookItem_${item.bookId}"),
-        cover = {
-            ThemedBookCover(
-                item = item,
-                contentDescription = item.displayName,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().recordLibraryCover(coverTap),
-                showFileType = true,
-            )
-            if (isSelected) {
-                Box(
-                    modifier = Modifier.matchParentSize().background(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = stringResource(R.string.content_desc_selected),
-                        modifier = Modifier.size(36.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                            .padding(6.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-            }
-        },
         header = {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -144,8 +108,17 @@ internal fun LibraryListItem(
             if (item.sourceFolderUri != null || item.isOpdsStream() || isPinned) {
                 FileStatusBadges(item = item, isPinned = isPinned)
             }
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.content_desc_selected),
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         },
         metadata = {
+            FileTypeBadge(item.type, compact = true)
             if (item.tags.isNotEmpty()) {
                 BookTagChipsRow(
                     tags = item.tags,

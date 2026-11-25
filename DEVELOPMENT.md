@@ -10,7 +10,7 @@
 | --- | --- |
 | 应用版本、发布变体、APK 命名与原生库校验 | [app/build.gradle.kts](app/build.gradle.kts) |
 | 书库分组、搜索展开、文件导入、续读和筛选 | [UnifiedLibraryScreen.kt](app/src/main/java/com/aryan/reader/UnifiedLibraryScreen.kt)、[UnifiedLibrarySections.kt](app/src/main/java/com/aryan/reader/UnifiedLibrarySections.kt) |
-| 圆角、描边和下方悬浮按钮 | `app/src/main/java/com/aryan/reader/LibraryAppearance.kt` |
+| 圆角、描边和书库底部按钮 | `app/src/main/java/com/aryan/reader/LibraryAppearance.kt` |
 | 封面、类别和开书动画 | [ThemedBookCover.kt](app/src/main/java/com/aryan/reader/ThemedBookCover.kt)、`app/src/main/java/com/aryan/reader/LibraryBookCategory.kt`、`app/src/main/java/com/aryan/reader/LibraryBookOpening.kt` |
 | 中文 TXT 章节识别和目录标题 | `app/src/main/java/com/aryan/reader/epub/ChineseTxtChapters.kt`、`app/src/main/java/com/aryan/reader/epubreader/TxtChapterTitles.kt` |
 | 书籍打开、恢复进度和阅读器路由 | [MainViewModel.kt](app/src/main/java/com/aryan/reader/MainViewModel.kt)、[AppNavigation.kt](app/src/main/java/com/aryan/reader/AppNavigation.kt) |
@@ -20,10 +20,10 @@ Android 端的运行标识为 `app.juanzhou.reader`，代码命名空间为 `com
 
 ## 产品和设计经验
 
-- **书库首页**直接提供本地导入和阅读。保留类别分组，网格按五列排布，列表减少固定留白。首页整理时一并核对空书库、搜索结果、分类标题和窄屏转行。导入、搜索和分类集中在书库，历史上的独立书架、侧菜单和不可用书源已从产品入口移除。
-- **按钮**以透明图标为主，沿用 4 dp 小圆角和细渐变描边。状态组从左至右为全部、正在阅读、已阅、未读，使用藏书、书签、对勾、合上的书四种图标。左下角导入和右下角续读用低对比度半透明底，在书封上保持辨识度。续读用打开的书，与「正在阅读」书签区分。纯图标入口提供中文无障碍名称。
+- **书库首页**直接提供本地导入和阅读。保留类别分组，网格按五列排布并显示封面，列表集中显示书名、作者、格式、标签及阅读进度。首页整理时一并核对空书库、搜索结果、分类标题和窄屏转行。导入、搜索和分类集中在书库，历史上的独立书架、侧菜单和不可用书源已从产品入口移除。
+- **按钮**沿用 4 dp 小圆角。状态组从左至右为全部、正在阅读、已阅、未读，使用藏书、书签、对勾、合上的书四种图标。当前状态用主题色底标出，纯图标入口提供中文无障碍名称。底部独立一行，左侧为「导入文件」，右侧为使用打开书本图标的「继续阅读」，两项均显示文字。
 - **搜索**默认收起为标题栏图标。打开后输入书名或作者，已有正文搜索能力按选项启用。键盘收起时保留输入与结果，退出搜索时恢复书库。
-- **封面**以浅色纸面、薄书脊、页边和投影表达装帧，类别之间用浅色和书脊做区分。自动封面的书名放在上半部，作者放在下方。长中文标题以近似等长的行优先排版。书籍有自带封面或文档预览图时保留原图。
+- **封面**以浅色纸面、薄书脊、页边和投影表达装帧。自动封面按书籍固定分配浅色渐变，同组书籍也可呈现多种色调。书名放在上半部，作者放在下方。长中文标题以近似等长的行优先排版。书籍有自带封面或文档预览图时保留原图。
 - **开书与续读**点击书封时，从实际来源封面做短过渡，加载沿用已有路径。书库和正文分阶段淡出、淡入，避免两层字同时可见。遇到打开慢，分别观察首开、重复打开、首个可读页面和续读定位。改动加载策略时一并验证旧版导入数据和阅读位置。
 - **阅读状态**正文支持翻页。隐藏系统顶部状态栏，底部以真实章节名替代泛化的 Part 标签。唤出上下工具栏时隐藏底部提示，顶部和底部工具栏及章节区用适度透明度。去掉 FPS 和「推理分段」提示时，保留真实章节顺序、目录条目和跳转位置。
 
