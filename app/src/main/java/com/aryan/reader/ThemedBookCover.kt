@@ -165,10 +165,15 @@ private fun GeneratedBookCover(
 ) {
     val title = remember(item.customName, item.title, item.displayName) { item.coverTitle() }
     val author = remember(item.author) { item.coverAuthor() }
+    val paperGradient = remember(palette.paper) {
+        Brush.linearGradient(
+            0f to lerp(Color.White, palette.paper, 0.08f),
+            0.62f to lerp(Color.White, palette.paper, 0.40f),
+            1f to palette.paper,
+        )
+    }
 
-    BoxWithConstraints(modifier = modifier.background(Brush.verticalGradient(
-        colors = listOf(lerp(palette.paper, Color.White, 0.74f), palette.paper),
-    ))) {
+    BoxWithConstraints(modifier = modifier.background(paperGradient)) {
         val compact = maxWidth < 64.dp || maxHeight < 85.dp
         val titleSize = (maxWidth.value * 0.10f).coerceIn(7f, 16f)
         val maxTitleLines = if (compact) 2 else 3
@@ -226,7 +231,7 @@ private fun GeneratedBookCover(
                     .fillMaxWidth()
                     .padding(bottom = maxOf(maxHeight * 0.13f, badgeClearance))
                     .then(textArea),
-                color = lerp(CoverInk, palette.paper, 0.34f),
+                color = lerp(CoverInk, palette.paper, 0.26f),
                 style = titleStyle.copy(
                     fontWeight = FontWeight.Normal,
                     fontSize = authorSize.sp,
@@ -245,14 +250,14 @@ private val CoverShadow = Color(0x60262F3B)
 private data class CoverPalette(val paper: Color, val accent: Color)
 
 private val coverPalettes = listOf(
-    CoverPalette(Color(0xFFE7EEE6), Color(0xFF8CAEA0)),
-    CoverPalette(Color(0xFFE8F1FA), Color(0xFF8FB3D4)),
-    CoverPalette(Color(0xFFF8EBE1), Color(0xFFDDA88B)),
-    CoverPalette(Color(0xFFF0EBF8), Color(0xFFAE9DCB)),
-    CoverPalette(Color(0xFFEEF1DD), Color(0xFFABB775)),
-    CoverPalette(Color(0xFFF5EEDC), Color(0xFFC7AC79)),
-    CoverPalette(Color(0xFFE4F2EF), Color(0xFF84BAAF)),
-    CoverPalette(Color(0xFFF7E8EA), Color(0xFFD09BAE)),
+    CoverPalette(Color(0xFFE7F6EF), Color(0xFF8CAEA0)),
+    CoverPalette(Color(0xFFE9F3FC), Color(0xFF8FB3D4)),
+    CoverPalette(Color(0xFFFFF1E9), Color(0xFFDDA88B)),
+    CoverPalette(Color(0xFFF2EDFC), Color(0xFFAE9DCB)),
+    CoverPalette(Color(0xFFEEF6E2), Color(0xFFABB775)),
+    CoverPalette(Color(0xFFFFF7E2), Color(0xFFC7AC79)),
+    CoverPalette(Color(0xFFE7F6F7), Color(0xFF84BAAF)),
+    CoverPalette(Color(0xFFFCECF2), Color(0xFFD09BAE)),
 )
 
 internal fun libraryCategoryAccent(category: LibraryBookCategory): Color =

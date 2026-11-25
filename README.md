@@ -9,7 +9,7 @@
 | 使用场景 | 已实现的功能 |
 | --- | --- |
 | 导入内容 | 从系统文件选择器导入文件，或授权本地文件夹加入书库。重复导入相同内容时复用已有书籍。支持 TXT、EPUB、PDF、MOBI／AZW／AZW3／PRC、FB2、Markdown、HTML、Word（DOCX／DOC／DOT）、ODT／FODT、PPTX，以及 CBZ／CBR／CB7／CBT 漫画。 |
-| 整理书库 | 按书名或作者搜索，在五列网格和紧凑列表之间切换。TXT 和 EPUB 分别成组，格式标签显示在封面左下角。「筛选与排序 → 分类顺序」可调整分组顺序。可按全部、正在阅读、已阅、未读筛选，也可手动调整分类或恢复已移除的书籍。 |
+| 整理书库 | 按书名或作者搜索，在五列网格和紧凑列表之间切换。TXT 和 EPUB 分别成组，自动封面按类别采用浅色渐变，格式标签显示在封面左下角。「筛选与排序 → 分类顺序」可调整分组顺序。可按全部、正在阅读、已阅、未读筛选，也可手动调整分类或恢复已移除的书籍。 |
 | 中文小说与电子书 | 识别常见中文 TXT 章节标题，按目录跳转。排版类内容可切换翻页和纵向滚动，调整字体、字号、行距和阅读主题。 |
 | PDF 与固定版式文件 | 支持缩放、跳页和通过目录定位。带文字层的 PDF 支持文内搜索，适用文件可使用书签、标注等阅读工具。 |
 | 朗读 | 支持在适用的文本和电子书中使用设备语音引擎朗读，可设置声音与读音替换。 |
@@ -17,7 +17,7 @@
 
 ## 源码与开发
 
-- 「设置 → 关于 → 本版本源码」打开对应 Git 标签。0.1.10 的源码见 [v0.1.10](https://github.com/locy016/WenkuReader/tree/v0.1.10)。
+- 「设置 → 关于 → 本版本源码」打开对应 Git 标签。0.1.11 的源码见 [v0.1.11](https://github.com/locy016/WenkuReader/tree/v0.1.11)。
 - 需要 JDK 21 和对应的 Android SDK 及 NDK。正式构建任务为 `:app:assembleOssRelease`，环境配置、模拟器验收及 USB 升级步骤见 [开发与发布手册](DEVELOPMENT.md)。
 - 功能建议和问题可通过 [GitHub Issues](https://github.com/locy016/WenkuReader/issues) 反馈。开发约定见 [项目约束](AGENTS.md)。
 
@@ -25,4 +25,4 @@
 
 文库阅读按 GNU Affero General Public License v3.0 only（AGPL-3.0-only）提供。使用、修改和再分发的条件，以及担保条款，见 [完整许可证](LICENSE)。APK 的「关于 → 许可证」也提供离线许可正文、第三方源码清单和依赖来源。
 
-**修改声明（2026-11-23，文库阅读 0.1.10）** 文库阅读包含 Episteme OSS（© 2026 Episteme）的代码，起点为上游 v1.0.59-oss 的 e3008fd4。文库阅读修改了应用标识和图标、书库交互、中文 TXT 章节识别、阅读界面及 Android 构建和发布流程。上游版权声明及第三方组件各自的许可继续适用。感谢上游作者和贡献者。[上游版本](https://github.com/Aryan-Raj3112/episteme/releases/tag/v1.0.59-oss) · [第三方源码清单](licenses/THIRD-PARTY-SOURCES.txt) · [libmobi 重链接说明](licenses/RELINKING.md)
+**修改声明（2026-11-25，文库阅读 0.1.11）** 文库阅读包含 Episteme OSS（© 2026 Episteme）的代码，起点为上游 v1.0.59-oss 的 e3008fd4。文库阅读修改了应用标识和图标、书库交互、中文 TXT 章节识别、阅读界面及 Android 构建和发布流程。上游版权声明及第三方组件各自的许可继续适用。感谢上游作者和贡献者。[上游版本](https://github.com/Aryan-Raj3112/episteme/releases/tag/v1.0.59-oss) · [第三方源码清单](licenses/THIRD-PARTY-SOURCES.txt) · [libmobi 重链接说明](licenses/RELINKING.md)
